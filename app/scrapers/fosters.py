@@ -10,7 +10,7 @@ class FostersScraper(BaseScraper):
 
     async def scrape(self, page: Page) -> List[Dict]:
         logger.info(f"Navigating to {self.store_name} weekly ad...")
-        await page.goto("https://www.fosterssupermarket.com/weekly-specials")
+        await page.goto("https://www.fosterssupermarket.com/weekly-ad")
         
         await page.wait_for_timeout(3000)
         

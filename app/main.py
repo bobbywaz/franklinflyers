@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from .database import get_db, init_db
 from .models import Run, Deal, BestStore, FailedScrape
@@ -12,6 +13,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Franklin Flyers")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 @app.on_event("startup")
@@ -37,7 +39,7 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
         context["failed_scrapes"] = latest_run.failed_scrapes
         context["best_store"] = latest_run.best_store
         
-        # Top 5 deals overall
+        # Top 6 deals overall
         context["top_overall"] = db.query(Deal).filter(Deal.run_id == latest_run.id).order_by(Deal.score.desc()).limit(6).all()
         
         # Deals by category
@@ -49,7 +51,7 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
             by_cat[d.category].append(d)
         context["deals_by_category"] = by_cat
 
-    return templates.TemplateResponse("index.html", context)
+    return templates.TemplateResponse(request=request, name="index.html", context=context)
 
 @app.post("/api/refresh")
 async def trigger_refresh(background_tasks: BackgroundTasks):

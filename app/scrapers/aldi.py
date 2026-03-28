@@ -11,7 +11,7 @@ class AldiScraper(BaseScraper):
     async def scrape(self, page: Page) -> List[Dict]:
         logger.info(f"Navigating to {self.store_name} weekly ad...")
         # ALDI's weekly ad URL for the Greenfield area (ZIP 01301)
-        await page.goto("https://weeklyad.aldi.us/weeklyad/?zipcode=01301")
+        await page.goto("https://www.aldi.us/weekly-specials/our-weekly-ads/")
         
         # Wait for the dynamic circular JS to render
         await page.wait_for_timeout(3000)

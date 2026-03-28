@@ -36,12 +36,22 @@ async def run_scrape_and_analyze():
             # Save best store
             if analysis.get('best_store'):
                 bs = analysis['best_store']
+                
+                # Ensure strengths/weaknesses are strings for SQLite
+                strengths = bs.get('strengths', '')
+                if isinstance(strengths, list):
+                    strengths = "\n".join(strengths)
+                
+                weaknesses = bs.get('weaknesses', '')
+                if isinstance(weaknesses, list):
+                    weaknesses = "\n".join(weaknesses)
+
                 db.add(BestStore(
                     run_id=new_run.id,
                     store_name=bs['store_name'],
                     summary=bs['summary'],
-                    strengths=bs['strengths'],
-                    weaknesses=bs['weaknesses'],
+                    strengths=strengths,
+                    weaknesses=weaknesses,
                     score=bs['score']
                 ))
 
