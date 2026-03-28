@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Franklin Flyers</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans p-8">
+    <div class="max-w-6xl mx-auto">
+        <header class="flex justify-between items-center mb-8 border-b pb-4">
+            <div>
+                <h1 class="text-4xl font-bold text-green-700">Franklin Flyers</h1>
+                <p class="text-sm text-gray-500">AI-Scored Grocery Deals</p>
+            </div>
+            <div class="text-right">
+                <button onclick="triggerRefresh()" class="bg-green-600 text-white py-2 px-4 rounded shadow hover:bg-green-700">Refresh Now</button>
+                {% if has_data %}
+                <p class="text-xs text-gray-500 mt-2">Last Run: {{ latest_run.run_date.strftime('%Y-%m-%d %H:%M') }}</p>
+                {% endif %}
+            </div>
+        </header>
+
+        {% if not has_data %}
+        <div class="bg-white p-6 rounded shadow text-center">No data. Click Refresh Now!</div>
+        {% else %}
+        
+        {% if failed_scrapes %}
+        <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-8">
+            <strong>Failed Scrapes:</strong>
+            <ul class="list-disc ml-5">
+                {% for fail in failed_scrapes %}<li>{{ fail.store_name }}: {{ fail.error_message }}</li>{% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if best_store %}
+        <section class="mb-10">
+            <h2 class="text-2xl font-bold mb-4">🏆 Best Store This Week: {{ best_store.store_name }}</h2>
+            <div class="bg-white rounded-lg shadow p-6 border-t-4 border-green-500">
+                <p class="mb-4">{{ best_store.summary }}</p>
+                <p><strong>Strengths:</strong> {{ best_store.strengths }} | <strong>Weaknesses:</strong> {{ best_store.weaknesses }}</p>
+                <p class="text-right text-sm text-green-700 font-bold mt-2">Confidence Score: {{ best_store.score }}/10</p>
+            </div>
+        </section>
+        {% endif %}
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-bold mb-4">🔥 Top 5 Deals Overall</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {% for deal in top_overall %}
+                <div class="bg-white rounded shadow p-4 relative">
+                    <span class="absolute top-0 right-0 bg-blue-500 text-white text-xs px-2 py-1">{{ deal.store_name }}</span>
+                    <span class="text-xs text-gray-400 uppercase font-bold">{{ deal.category }}</span>
+                    <h3 class="font-bold text-lg mt-1">{{ deal.item_name }}</h3>
+                    <p class="text-2xl text-green-600 font-extrabold">{{ deal.sale_price }}</p>
+                    <p class="text-sm text-gray-600 mt-2 italic">"{{ deal.explanation }}"</p>
+                    <p class="text-xs text-gray-400 mt-2 text-right">Score: {{ deal.score }}/10</p>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-bold mb-4">🛒 Top Deals by Category</h2>
+            <div class="bg-white rounded shadow p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                {% for category, deals in deals_by_category.items() %}
+                <div>
+                    <h3 class="text-xl font-bold border-b pb-2 mb-4">{{ category|capitalize }}</h3>
+                    <ul class="space-y-3">
+                        {% for deal in deals %}
+                        <li class="flex justify-between items-center bg-gray-50 p-2 rounded">
+                            <div>
+                                <p class="text-xs font-bold text-gray-500">{{ deal.store_name }}</p>
+                                <p class="font-semibold">{{ deal.item_name }}</p>
+                            </div>
+                            <div class="text-right text-green-600 font-bold">{{ deal.sale_price }}</div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        {% endif %}
+    </div>
+    <script>
+        function triggerRefresh() {
+            if(confirm("Trigger background scrape? This takes a few minutes.")) {
+                fetch('/api/refresh', { method: 'POST' })
+                    .then(res => res.json()).then(data => alert(data.message));
+            }
+        }
+    </script>
+</body>
+</html>
