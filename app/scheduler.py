@@ -67,11 +67,12 @@ async def run_scrape_and_analyze():
                     explanation=d['explanation']
                 ))
             
-            db.commit()
             logger.info(f"Successfully finished scrape run {new_run.id}.")
         else:
             logger.warning("No deals found during scrape run.")
             
+        db.commit()
+
     except Exception as e:
         logger.error(f"Error in scheduled job: {e}")
     finally:
