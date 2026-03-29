@@ -70,7 +70,7 @@ class GeminiAnalyzer:
         """
 
         try:
-            response = self.model.generate_content(prompt)
+            response = await self.model.generate_content_async(prompt)
             # Remove markdown code block if present
             text = response.text.strip()
             if text.startswith("```json"):
