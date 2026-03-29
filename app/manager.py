@@ -10,6 +10,8 @@ from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+
 class ScraperManager:
     def __init__(self):
         self.scrapers = [
@@ -31,7 +33,7 @@ class ScraperManager:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+                user_agent=DEFAULT_USER_AGENT
             )
 
             for scraper in self.scrapers:
