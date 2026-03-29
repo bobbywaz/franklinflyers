@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from playwright.async_api import async_playwright
 from .scrapers.aldi import AldiScraper
