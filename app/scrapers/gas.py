@@ -9,7 +9,8 @@ class GasScraper:
     def __init__(self):
         self.cities = [
             {"name": "Greenfield", "url": "https://dmv-test-pro.com/gas-prices/massachusetts/greenfield"},
-            {"name": "Turners Falls", "url": "https://dmv-test-pro.com/gas-prices/massachusetts/turners-falls"}
+            {"name": "Turners Falls", "url": "https://dmv-test-pro.com/gas-prices/massachusetts/turners-falls"},
+            {"name": "Gill", "url": "https://dmv-test-pro.com/gas-prices/massachusetts/gill"}
         ]
 
     async def scrape(self, page: Page, run_date: str = None) -> List[Dict]:
@@ -38,6 +39,10 @@ class GasScraper:
                         name = (await name_el.inner_text()).strip()
                         address = (await address_el.inner_text()).strip() if address_el else ""
                         price = (await price_el.inner_text()).strip()
+
+                        # Rename 'Mobil' to 'The Mill' for Gill
+                        if city['name'] == "Gill" and name.lower() == "mobil":
+                            name = "The Mill"
 
                         # Only add if we haven't seen this station in this city yet
                         # This avoids adding Mid-grade/Premium prices which follow Regular
