@@ -1,12 +1,14 @@
-from fastapi import FastAPI, Depends, Request, BackgroundTasks
+from fastapi import FastAPI, Depends, Request, BackgroundTasks, Security, HTTPException, status
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
 from .database import get_db, init_db
 from .models import Run, Deal, BestStore, FailedScrape
 from .scheduler import start_scheduler, run_scrape_and_analyze
 import logging
+import os
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -53,8 +55,26 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
 
     return templates.TemplateResponse(request=request, name="index.html", context=context)
 
+API_KEY_NAME = "X-API-KEY"
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+async def get_api_key(api_key_header: str = Security(api_key_header)):
+    admin_api_key = os.getenv("ADMIN_API_KEY")
+    if not admin_api_key:
+        logger.error("ADMIN_API_KEY not set in environment variables.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="API Key not configured."
+        )
+    if api_key_header == admin_api_key:
+        return api_key_header
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Could not validate credentials"
+    )
+
 @app.post("/api/refresh")
-async def trigger_refresh(background_tasks: BackgroundTasks):
+async def trigger_refresh(background_tasks: BackgroundTasks, api_key: str = Security(get_api_key)):
     logger.info("Manual refresh triggered.")
     background_tasks.add_task(run_scrape_and_analyze)
     return {"message": "Scrape process started in the background."}
