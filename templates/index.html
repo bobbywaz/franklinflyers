@@ -90,8 +90,28 @@
     <script>
         function triggerRefresh() {
             if(confirm("Trigger background scrape? This takes a few minutes.")) {
-                fetch('/api/refresh', { method: 'POST' })
-                    .then(res => res.json()).then(data => alert(data.message));
+                const apiKey = prompt("Please enter the Admin API Key:");
+                if (!apiKey) {
+                    alert("API Key is required to trigger a refresh.");
+                    return;
+                }
+                fetch('/api/refresh', {
+                    method: 'POST',
+                    headers: {
+                        'X-API-KEY': apiKey
+                    }
+                })
+                .then(res => {
+                    if (res.status === 403) {
+                        alert("Unauthorized: Invalid or missing API Key.");
+                        return;
+                    }
+                    return res.json().then(data => alert(data.message));
+                })
+                .catch(err => {
+                    console.error('Error:', err);
+                    alert("An error occurred while triggering the refresh.");
+                });
             }
         }
     </script>
