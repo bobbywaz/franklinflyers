@@ -8,54 +8,71 @@ logger = logging.getLogger(__name__)
 
 class GasScraper:
     def __init__(self):
+        # GasBuddy city pages are more reliable for granular timestamps
         self.cities = [
-            {"name": "Greenfield", "url": "https://dmv-test-pro.com/gas-prices/massachusetts/greenfield"},
-            {"name": "Turners Falls", "url": "https://dmv-test-pro.com/gas-prices/massachusetts/turners-falls"},
-            {"name": "Gill", "url": "https://dmv-test-pro.com/gas-prices/massachusetts/gill"}
+            {"name": "Greenfield", "url": "https://www.gasbuddy.com/gasprices/massachusetts/greenfield"},
+            {"name": "Turners Falls", "url": "https://www.gasbuddy.com/gasprices/massachusetts/turners-falls"},
+            {"name": "Gill", "url": "https://www.gasbuddy.com/gasprices/massachusetts/gill"}
         ]
 
     async def scrape(self, page: Page, run_date: str = None) -> List[Dict]:
         """
-        Scrape gas prices from dmv-test-pro.com.
+        Scrape gas prices from GasBuddy.
         """
         all_prices = []
         for city in self.cities:
             try:
-                logger.info(f"Scraping gas prices for {city['name']}...")
-                await page.goto(city['url'], wait_until="domcontentloaded", timeout=60000)
+                logger.info(f"Scraping GasBuddy prices for {city['name']}...")
+                # GasBuddy can be slow, use 'load' and a decent timeout
+                await page.goto(city['url'], wait_until="load", timeout=60000)
                 
-                # Wait for gas items to load
-                await page.wait_for_selector(".gas-tab-item", timeout=60000)
-                await asyncio.sleep(2) # Extra buffer for elements to populate
-                
-                items = await page.query_selector_all(".gas-tab-item")
+                # Wait for station elements to load
+                # GasBuddy uses classes that often contain 'StationDisplay'
+                try:
+                    await page.wait_for_selector("[class*='StationDisplay']", timeout=15000)
+                except:
+                    logger.warning(f"Timeout waiting for StationDisplay in {city['name']}, trying fallback...")
 
+                # Buffer for dynamic content
+                await asyncio.sleep(3)
+                
+                # Get all station containers
+                stations = await page.query_selector_all("[class*='StationDisplay-module__station']")
+                
                 city_stations = set()
-                for item in items:
-                    name_el = await item.query_selector(".tab-item-title")
-                    address_el = await item.query_selector(".tab-item-des")
-                    price_el = await item.query_selector(".tab-item-price")
+                for station in stations:
+                    text = await station.inner_text()
+                    lines = [line.strip() for line in text.split('\n') if line.strip()]
                     
-                    # Extract source update time from comment in HTML
-                    # e.g. <!-- <div class="tab-item-time">1 DAY AGO</div> -->
-                    html = await item.inner_html()
-                    source_time = "Unknown"
-                    time_match = re.search(r'<!--\s*<div class="tab-item-time">(.*?)</div>\s*-->', html)
-                    if time_match:
-                        source_time = time_match.group(1).strip()
-
-                    if name_el and price_el:
-                        name = (await name_el.inner_text()).strip()
-                        address = (await address_el.inner_text()).strip() if address_el else ""
-                        price = (await price_el.inner_text()).strip()
+                    if len(lines) >= 3:
+                        # GasBuddy layout is roughly:
+                        # 0: Station Name
+                        # 1: Address
+                        # 2: Price (e.g. $3.69)
+                        # 3: Reporter/Time (e.g. 11 Hours Ago)
+                        
+                        name = lines[0]
+                        address = lines[1]
+                        
+                        # Find the first line that looks like a price ($X.XX)
+                        price = "Unknown"
+                        source_time = "Unknown"
+                        
+                        for i, line in enumerate(lines):
+                            if re.match(r'\$\d\.\d{2}', line):
+                                price = line
+                                # The line after the price or containing "Ago" is usually the time
+                                for j in range(i+1, min(i+4, len(lines))):
+                                    if "Ago" in lines[j] or "minutes" in lines[j].lower() or "hours" in lines[j].lower():
+                                        source_time = lines[j]
+                                        break
+                                break
 
                         # Rename 'Mobil' to 'The Mill' for Gill
-                        if city['name'] == "Gill" and name.lower() == "mobil":
+                        if city['name'] == "Gill" and "mobil" in name.lower():
                             name = "The Mill"
 
-                        # Only add if we haven't seen this station in this city yet
-                        # This avoids adding Mid-grade/Premium prices which follow Regular
-                        if name not in city_stations:
+                        if name not in city_stations and price != "Unknown":
                             all_prices.append({
                                 "station_name": name,
                                 "address": address,
@@ -66,8 +83,9 @@ class GasScraper:
                                 "source_updated_at": source_time
                             })
                             city_stations.add(name)
+                            logger.info(f"Scraped {name} in {city['name']}: {price} ({source_time})")
 
             except Exception as e:
-                logger.error(f"Error scraping gas for {city['name']}: {e}")
+                logger.error(f"Error scraping GasBuddy for {city['name']}: {e}")
         
         return all_prices
