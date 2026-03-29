@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from .database import get_db, init_db
 from .models import Run, Deal, BestStore, FailedScrape
 from .scheduler import start_scheduler, run_scrape_and_analyze
@@ -23,7 +23,7 @@ async def startup_event():
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request, db: Session = Depends(get_db)):
-    latest_run = db.query(Run).order_by(Run.run_date.desc()).first()
+    latest_run = db.query(Run).options(joinedload(Run.failed_scrapes), joinedload(Run.best_store)).order_by(Run.run_date.desc()).first()
     
     context = {
         "request": request,
