@@ -87,40 +87,6 @@
         </section>
 
         <section class="mb-10">
-            <h2 class="text-2xl font-bold mb-4 text-white">⛽ Local Gas Prices</h2>
-            <div class="border-t-8 border-blue-600 rounded-t-lg"></div>
-            <div class="bg-white rounded-b-lg shadow p-6 mt-0">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {% for city, prices in gas_by_city.items() %}
-                    <div>
-                        <h3 class="text-xl font-bold border-b pb-2 mb-4">{{ city }}</h3>
-                        <div class="space-y-3">
-                            {% for gp in prices %}
-                            <div class="bg-gray-50 p-3 rounded flex justify-between items-center border border-gray-100">
-                                <div>
-                                    <p class="font-bold text-gray-800">{{ gp.station_name }}</p>
-                                    <p class="text-xs text-gray-500">{{ gp.address }}</p>
-                                </div>
-                                <div class="text-right">
-                                    <p class="text-xl font-black text-blue-700">{{ gp.price }}</p>
-                                    <p class="text-[10px] text-gray-400 uppercase font-bold">{{ gp.fuel_type }}</p>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                    
-                    {% if not gas_by_city %}
-                    <div class="col-span-2 text-center py-8 text-gray-400 italic">
-                        No gas price data available for this run.
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-        </section>
-
-        <section class="mb-10">
             <h2 class="text-2xl font-bold mb-4 text-white">🛒 Top Deals by Category</h2>
             <div class="border-t-8 border-red-600 rounded-t-lg"></div>
             <div class="bg-white rounded-b-lg shadow p-6 grid grid-cols-1 md:grid-cols-2 gap-8 mt-0">
@@ -240,6 +206,40 @@
             </div>
         </section>
         {% endif %}
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-bold mb-4 text-white">⛽ Local Gas Prices</h2>
+            <div class="border-t-8 border-blue-600 rounded-t-lg"></div>
+            <div class="bg-white rounded-b-lg shadow p-6 mt-0">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {% for city, prices in gas_by_city.items() %}
+                    <div>
+                        <h3 class="text-xl font-bold border-b pb-2 mb-4">{{ city }}</h3>
+                        <div class="space-y-3">
+                            {% for gp in prices %}
+                            <div class="bg-gray-50 p-3 rounded flex justify-between items-center border border-gray-100">
+                                <div>
+                                    <p class="font-bold text-gray-800">{{ gp.station_name }}</p>
+                                    <p class="text-xs text-gray-500">{{ gp.address }}</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-xl font-black text-blue-700">{{ gp.price }}</p>
+                                    <p class="text-[10px] text-gray-400 uppercase font-bold">{{ gp.fuel_type }}</p>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    
+                    {% if not gas_by_city %}
+                    <div class="col-span-2 text-center py-8 text-gray-400 italic">
+                        No gas price data available for this run.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
 
         {% endif %}
 
