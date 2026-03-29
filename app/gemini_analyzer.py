@@ -7,6 +7,17 @@ import google.generativeai as genai
 
 logger = logging.getLogger(__name__)
 
+# Keywords for mock analysis categorization
+PRODUCE_KEYWORDS = ('apple', 'strawberr', 'produce', 'fruit', 'vegetable', 'avocado')
+MEAT_KEYWORDS = ('beef', 'chicken', 'pork', 'steak', 'meat', 'ribs', 'breast', 'chop', 'fish', 'seafood')
+DAIRY_KEYWORDS = ('milk', 'cheese', 'yogurt', 'dairy', 'butter')
+BEVERAGE_KEYWORDS = ('coca', 'cola', 'soda', 'beverage', 'juice', 'water')
+PANTRY_KEYWORDS = ('cereal', 'pantry', 'muffin', 'bread', 'flour', 'sugar')
+DELI_KEYWORDS = ('deli', 'ham', 'turkey', 'sliced')
+CANNED_KEYWORDS = ('can', 'soup', 'beans')
+FROZEN_KEYWORDS = ('frozen', 'pizza', 'ice cream')
+HOUSEHOLD_KEYWORDS = ('paper', 'soap', 'cleaner', 'household')
+
 class GeminiAnalyzer:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
@@ -143,23 +154,23 @@ class GeminiAnalyzer:
         
         for d in sample_deals:
             name_lower = d['name'].lower()
-            if any(x in name_lower for x in ['apple', 'strawberr', 'produce', 'fruit', 'vegetable', 'avocado']):
+            if any(x in name_lower for x in PRODUCE_KEYWORDS):
                 category = "Produce"
-            elif any(x in name_lower for x in ['beef', 'chicken', 'pork', 'steak', 'meat', 'ribs', 'breast', 'chop', 'fish', 'seafood']):
+            elif any(x in name_lower for x in MEAT_KEYWORDS):
                 category = "Meat and Seafood"
-            elif any(x in name_lower for x in ['milk', 'cheese', 'yogurt', 'dairy', 'butter']):
+            elif any(x in name_lower for x in DAIRY_KEYWORDS):
                 category = "Dairy"
-            elif any(x in name_lower for x in ['coca', 'cola', 'soda', 'beverage', 'juice', 'water']):
+            elif any(x in name_lower for x in BEVERAGE_KEYWORDS):
                 category = "Beverages"
-            elif any(x in name_lower for x in ['cereal', 'pantry', 'muffin', 'bread', 'flour', 'sugar']):
+            elif any(x in name_lower for x in PANTRY_KEYWORDS):
                 category = "Pantry"
-            elif any(x in name_lower for x in ['deli', 'ham', 'turkey', 'sliced']):
+            elif any(x in name_lower for x in DELI_KEYWORDS):
                 category = "Deli"
-            elif any(x in name_lower for x in ['can', 'soup', 'beans']):
+            elif any(x in name_lower for x in CANNED_KEYWORDS):
                 category = "Canned Goods"
-            elif any(x in name_lower for x in ['frozen', 'pizza', 'ice cream']):
+            elif any(x in name_lower for x in FROZEN_KEYWORDS):
                 category = "Frozen"
-            elif any(x in name_lower for x in ['paper', 'soap', 'cleaner', 'household']):
+            elif any(x in name_lower for x in HOUSEHOLD_KEYWORDS):
                 category = "Household"
             else:
                 category = "Pantry"
