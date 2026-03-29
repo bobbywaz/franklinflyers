@@ -5,7 +5,8 @@ from .scrapers.big_y import BigYScraper
 from .scrapers.food_city import FoodCityScraper
 from .scrapers.stop_and_shop import StopAndShopScraper
 from .scrapers.fosters import FostersScraper
-from typing import List, Dict
+from .scrapers.gas import GasScraper
+from typing import List, Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +19,17 @@ class ScraperManager:
             StopAndShopScraper(),
             FostersScraper()
         ]
+        self.gas_scraper = GasScraper()
 
-    async def run_all_scrapers(self) -> List[Dict]:
+    async def run_all_scrapers(self) -> Tuple[List[Dict], List[Dict], List[Dict]]:
         """
-        Run all registered scrapers and return a list of all found deals.
-        Also returns a list of errors for failed scrapers.
+        Run all registered scrapers and return:
+        - List of all found deals
+        - List of all gas prices
+        - List of errors for failed scrapers
         """
         all_deals = []
+        gas_prices = []
         failed_scrapes = []
 
         async with async_playwright() as p:
@@ -33,6 +38,7 @@ class ScraperManager:
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
             )
 
+            # Grocery scrapers
             for scraper in self.scrapers:
                 try:
                     page = await context.new_page()
@@ -46,6 +52,15 @@ class ScraperManager:
                     logger.error(f"Scraper for {scraper.store_name} failed: {e}")
                     failed_scrapes.append({"store_name": scraper.store_name, "error_message": str(e)})
 
+            # Gas scraper
+            try:
+                page = await context.new_page()
+                gas_prices = await self.gas_scraper.scrape(page)
+                await page.close()
+            except Exception as e:
+                logger.error(f"Gas Scraper failed: {e}")
+                failed_scrapes.append({"store_name": "Gas Prices", "error_message": str(e)})
+
             await browser.close()
         
-        return all_deals, failed_scrapes
+        return all_deals, gas_prices, failed_scrapes

@@ -16,6 +16,6 @@ class FoodCityScraper(BaseScraper):
         
         # Placeholder extraction
         return [
-            {"name": "Coca-Cola", "price": "3 for $12", "description": "12-packs"},
+            {"name": "Coca-Cola", "price": "3 for $12 ($4/ea)", "description": "12-pack 12oz cans"},
             {"name": "Pork Chops", "price": "$1.99/lb", "description": "Bone-in"},
         ]

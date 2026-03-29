@@ -2,17 +2,13 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import os
 import logging
+import json
 from .manager import ScraperManager
 from .gemini_analyzer import GeminiAnalyzer
 from .database import SessionLocal, init_db
-from .models import Run, Deal, BestStore, FailedScrape
+from .models import Run, Deal, BestStore, FailedScrape, GasPrice
 
 logger = logging.getLogger(__name__)
-
-def _format_list_to_string(value):
-    if isinstance(value, list):
-        return "\n".join(value)
-    return value
 
 async def run_scrape_and_analyze():
     logger.info("Starting scheduled scrape job...")
@@ -26,7 +22,7 @@ async def run_scrape_and_analyze():
         db.commit()
         db.refresh(new_run)
 
-        all_deals, failed_scrapes = await manager.run_all_scrapers()
+        all_deals, gas_prices, failed_scrapes = await manager.run_all_scrapers()
         
         for fail in failed_scrapes:
             db.add(FailedScrape(
@@ -35,16 +31,46 @@ async def run_scrape_and_analyze():
                 error_message=fail['error_message']
             ))
 
+        # Save gas prices
+        for gp in gas_prices:
+            db.add(GasPrice(
+                run_id=new_run.id,
+                station_name=gp['station_name'],
+                address=gp['address'],
+                city=gp['city'],
+                price=gp['price'],
+                fuel_type=gp['fuel_type']
+            ))
+
         if all_deals:
             analysis = await analyzer.analyze_deals(all_deals)
             
+            # Save seasonal info
+            if analysis.get('seasonal_guide'):
+                logger.info(f"Saving seasonal_info for run: {analysis['seasonal_guide']}")
+                new_run.seasonal_info = json.dumps(analysis['seasonal_guide'])
+            else:
+                logger.warning("No seasonal_guide found in analysis results.")
+
+            # Save recipe idea
+            if analysis.get('recipe_idea'):
+                logger.info(f"Saving recipe_idea for run: {analysis['recipe_idea']}")
+                new_run.recipe_idea = json.dumps(analysis['recipe_idea'])
+            else:
+                logger.warning("No recipe_idea found in analysis results.")
+
             # Save best store
             if analysis.get('best_store'):
                 bs = analysis['best_store']
                 
                 # Ensure strengths/weaknesses are strings for SQLite
-                strengths = _format_list_to_string(bs.get('strengths', ''))
-                weaknesses = _format_list_to_string(bs.get('weaknesses', ''))
+                strengths = bs.get('strengths', '')
+                if isinstance(strengths, list):
+                    strengths = "\n".join(strengths)
+                
+                weaknesses = bs.get('weaknesses', '')
+                if isinstance(weaknesses, list):
+                    weaknesses = "\n".join(weaknesses)
 
                 db.add(BestStore(
                     run_id=new_run.id,
@@ -61,18 +87,16 @@ async def run_scrape_and_analyze():
                     run_id=new_run.id,
                     store_name=d['store_name'],
                     item_name=d['item_name'],
+                    description=d.get('size', ''),
                     sale_price=d['sale_price'],
                     category=d['category'],
                     score=d['score'],
                     explanation=d['explanation']
                 ))
             
-            logger.info(f"Successfully finished scrape run {new_run.id}.")
-        else:
-            logger.warning("No deals found during scrape run.")
-            
         db.commit()
-
+        logger.info(f"Successfully finished scrape run {new_run.id}.")
+            
     except Exception as e:
         logger.error(f"Error in scheduled job: {e}")
     finally:
