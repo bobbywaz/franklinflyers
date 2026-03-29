@@ -4,7 +4,7 @@ import os
 import logging
 from .manager import ScraperManager
 from .gemini_analyzer import GeminiAnalyzer
-from .database import SessionLocal, init_db
+from .database import SessionLocal
 from .models import Run, Deal, BestStore, FailedScrape
 
 logger = logging.getLogger(__name__)
