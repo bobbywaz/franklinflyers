@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
+from collections import defaultdict
 from .database import get_db, init_db
 from .models import Run, Deal
 from .scheduler import start_scheduler, run_scrape_and_analyze
