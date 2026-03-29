@@ -112,10 +112,10 @@ class GeminiAnalyzer:
                 "personal care": "Household"
             }
 
-            valid_categories = [
+            valid_categories = {
                 "Produce", "Meat and Seafood", "Deli", "Beverages", 
                 "Pantry", "Dairy", "Canned Goods", "Frozen", "Household"
-            ]
+            }
 
             for d in result.get('scored_deals', []):
                 original_cat = d.get('category', 'Unknown')
