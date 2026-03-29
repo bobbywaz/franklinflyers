@@ -7,6 +7,7 @@ from .database import get_db, init_db
 from .models import Run, Deal, BestStore, FailedScrape
 from .scheduler import start_scheduler, run_scrape_and_analyze
 import logging
+from collections import defaultdict
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -44,12 +45,10 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
         
         # Deals by category
         deals = db.query(Deal).filter(Deal.run_id == latest_run.id).all()
-        by_cat = {}
+        by_cat = defaultdict(list)
         for d in deals:
-            if d.category not in by_cat:
-                by_cat[d.category] = []
             by_cat[d.category].append(d)
-        context["deals_by_category"] = by_cat
+        context["deals_by_category"] = dict(by_cat)
 
     return templates.TemplateResponse(request=request, name="index.html", context=context)
 
