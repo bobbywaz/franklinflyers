@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from .database import get_db, init_db
-from .models import Run, Deal, BestStore, FailedScrape
+from .models import Run, Deal
 from .scheduler import start_scheduler, run_scrape_and_analyze
 import logging
 from collections import defaultdict
