@@ -19,10 +19,10 @@ class GasScraper:
         for city in self.cities:
             try:
                 logger.info(f"Scraping gas prices for {city['name']}...")
-                await page.goto(city['url'], wait_until="networkidle")
+                await page.goto(city['url'], wait_until="networkidle", timeout=60000)
                 
                 # Wait for gas items to load
-                await page.wait_for_selector(".gas-tab-item", timeout=10000)
+                await page.wait_for_selector(".gas-tab-item", timeout=60000)
                 
                 items = await page.query_selector_all(".gas-tab-item")
 
