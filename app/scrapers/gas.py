@@ -1,6 +1,7 @@
 from typing import List, Dict
 from playwright.async_api import Page
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +20,11 @@ class GasScraper:
         for city in self.cities:
             try:
                 logger.info(f"Scraping gas prices for {city['name']}...")
-                await page.goto(city['url'], wait_until="networkidle", timeout=60000)
+                await page.goto(city['url'], wait_until="domcontentloaded", timeout=60000)
                 
                 # Wait for gas items to load
                 await page.wait_for_selector(".gas-tab-item", timeout=60000)
+                await asyncio.sleep(2) # Extra buffer for elements to populate
                 
                 items = await page.query_selector_all(".gas-tab-item")
 
