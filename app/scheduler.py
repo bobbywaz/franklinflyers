@@ -98,6 +98,7 @@ async def run_scrape_and_analyze():
                     explanation=d['explanation']
                 ))
             
+        new_run.is_ready = True
         db.commit()
         logger.info(f"Successfully finished scrape run {new_run.id}.")
             

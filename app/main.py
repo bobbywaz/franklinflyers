@@ -24,7 +24,7 @@ async def startup_event():
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request, db: Session = Depends(get_db)):
-    latest_run = db.query(Run).order_by(Run.run_date.desc()).first()
+    latest_run = db.query(Run).filter(Run.is_ready == True).order_by(Run.run_date.desc()).first()
     
     context = {
         "request": request,

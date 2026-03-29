@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 import datetime
@@ -9,6 +9,7 @@ class Run(Base):
     __tablename__ = 'runs'
     id = Column(Integer, primary_key=True)
     run_date = Column(DateTime, default=datetime.datetime.utcnow)
+    is_ready = Column(Boolean, default=False)
     seasonal_info = Column(Text) # JSON string containing in_season and out_season
     recipe_idea = Column(Text) # JSON string containing recipe details
     
