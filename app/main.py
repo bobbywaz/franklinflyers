@@ -36,13 +36,20 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
         "deals_by_category": {},
         "seasonal_guide": None,
         "recipe_idea": None,
-        "gas_prices": []
+        "gas_by_city": {}
     }
 
     if latest_run:
         context["failed_scrapes"] = latest_run.failed_scrapes
         context["best_store"] = latest_run.best_store
-        context["gas_prices"] = latest_run.gas_prices
+        
+        # Group gas prices by city
+        gas_by_city = {}
+        for gp in latest_run.gas_prices:
+            if gp.city not in gas_by_city:
+                gas_by_city[gp.city] = []
+            gas_by_city[gp.city].append(gp)
+        context["gas_by_city"] = gas_by_city
         
         if latest_run.seasonal_info:
             try:

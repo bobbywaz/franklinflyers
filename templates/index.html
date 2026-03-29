@@ -91,14 +91,6 @@
             <div class="border-t-8 border-blue-600 rounded-t-lg"></div>
             <div class="bg-white rounded-b-lg shadow p-6 mt-0">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {% set gas_by_city = {} %}
-                    {% for gp in gas_prices %}
-                        {% if gp.city not in gas_by_city %}
-                            {% set _ = gas_by_city.update({gp.city: []}) %}
-                        {% endif %}
-                        {% set _ = gas_by_city[gp.city].append(gp) %}
-                    {% endfor %}
-
                     {% for city, prices in gas_by_city.items() %}
                     <div>
                         <h3 class="text-xl font-bold border-b pb-2 mb-4">{{ city }}</h3>
@@ -119,7 +111,7 @@
                     </div>
                     {% endfor %}
                     
-                    {% if not gas_prices %}
+                    {% if not gas_by_city %}
                     <div class="col-span-2 text-center py-8 text-gray-400 italic">
                         No gas price data available for this run.
                     </div>
