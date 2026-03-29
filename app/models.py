@@ -61,5 +61,6 @@ class GasPrice(Base):
     city = Column(String)
     price = Column(String)
     fuel_type = Column(String)
+    updated_at = Column(String)
     
     run = relationship("Run", back_populates="gas_prices")

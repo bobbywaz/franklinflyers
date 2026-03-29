@@ -12,7 +12,7 @@ class GasScraper:
             {"name": "Turners Falls", "url": "https://dmv-test-pro.com/gas-prices/massachusetts/turners-falls"}
         ]
 
-    async def scrape(self, page: Page) -> List[Dict]:
+    async def scrape(self, page: Page, run_date: str = None) -> List[Dict]:
         """
         Scrape gas prices from dmv-test-pro.com.
         """
@@ -47,7 +47,8 @@ class GasScraper:
                                 "address": address,
                                 "city": city['name'],
                                 "price": price,
-                                "fuel_type": "Regular"
+                                "fuel_type": "Regular",
+                                "updated_at": run_date
                             })
                             city_stations.add(name)
 

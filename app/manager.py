@@ -21,7 +21,7 @@ class ScraperManager:
         ]
         self.gas_scraper = GasScraper()
 
-    async def run_all_scrapers(self) -> Tuple[List[Dict], List[Dict], List[Dict]]:
+    async def run_all_scrapers(self, run_date: str = None) -> Tuple[List[Dict], List[Dict], List[Dict]]:
         """
         Run all registered scrapers and return:
         - List of all found deals
@@ -55,7 +55,7 @@ class ScraperManager:
             # Gas scraper
             try:
                 page = await context.new_page()
-                gas_prices = await self.gas_scraper.scrape(page)
+                gas_prices = await self.gas_scraper.scrape(page, run_date=run_date)
                 await page.close()
             except Exception as e:
                 logger.error(f"Gas Scraper failed: {e}")

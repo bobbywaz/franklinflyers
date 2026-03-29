@@ -21,8 +21,10 @@ async def run_scrape_and_analyze():
         db.add(new_run)
         db.commit()
         db.refresh(new_run)
+        
+        run_date_str = new_run.run_date.strftime('%Y-%m-%d %H:%M')
 
-        all_deals, gas_prices, failed_scrapes = await manager.run_all_scrapers()
+        all_deals, gas_prices, failed_scrapes = await manager.run_all_scrapers(run_date=run_date_str)
         
         for fail in failed_scrapes:
             db.add(FailedScrape(
@@ -39,7 +41,8 @@ async def run_scrape_and_analyze():
                 address=gp['address'],
                 city=gp['city'],
                 price=gp['price'],
-                fuel_type=gp['fuel_type']
+                fuel_type=gp['fuel_type'],
+                updated_at=gp['updated_at']
             ))
 
         if all_deals:
