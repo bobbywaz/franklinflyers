@@ -16,6 +16,11 @@ app = FastAPI(title="Franklin Flyers")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+_homepage_cache = {
+    "run_id": None,
+    "context": None
+}
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
@@ -25,8 +30,12 @@ async def startup_event():
 async def read_root(request: Request, db: Session = Depends(get_db)):
     latest_run = db.query(Run).order_by(Run.run_date.desc()).first()
     
+    if latest_run and _homepage_cache["run_id"] == latest_run.id:
+        context = _homepage_cache["context"].copy()
+        context["request"] = request
+        return templates.TemplateResponse(request=request, name="index.html", context=context)
+
     context = {
-        "request": request,
         "has_data": latest_run is not None,
         "latest_run": latest_run,
         "failed_scrapes": [],
@@ -51,6 +60,11 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
             by_cat[d.category].append(d)
         context["deals_by_category"] = by_cat
 
+        # Update cache
+        _homepage_cache["run_id"] = latest_run.id
+        _homepage_cache["context"] = context.copy()
+
+    context["request"] = request
     return templates.TemplateResponse(request=request, name="index.html", context=context)
 
 @app.post("/api/refresh")
