@@ -225,9 +225,14 @@
                                 <div class="text-right">
                                     <p class="text-xl font-black text-blue-700">{{ gp.price }}</p>
                                     <p class="text-[10px] text-gray-400 uppercase font-bold">{{ gp.fuel_type }}</p>
-                                    {% if gp.updated_at %}
-                                    <p class="text-[9px] text-gray-400 mt-1 italic">🕒 Last Checked: {{ gp.updated_at }}</p>
-                                    {% endif %}
+                                    <div class="mt-1 space-y-0.5">
+                                        {% if gp.source_updated_at %}
+                                        <p class="text-[9px] text-blue-400 font-bold italic">Source: {{ gp.source_updated_at }}</p>
+                                        {% endif %}
+                                        {% if gp.updated_at %}
+                                        <p class="text-[8px] text-gray-500 italic">Checked: {{ gp.updated_at }}</p>
+                                        {% endif %}
+                                    </div>
                                 </div>
                             </div>
                             {% endfor %}

@@ -2,6 +2,7 @@ from typing import List, Dict
 from playwright.async_api import Page
 import logging
 import asyncio
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,14 @@ class GasScraper:
                     name_el = await item.query_selector(".tab-item-title")
                     address_el = await item.query_selector(".tab-item-des")
                     price_el = await item.query_selector(".tab-item-price")
+                    
+                    # Extract source update time from comment in HTML
+                    # e.g. <!-- <div class="tab-item-time">1 DAY AGO</div> -->
+                    html = await item.inner_html()
+                    source_time = "Unknown"
+                    time_match = re.search(r'<!--\s*<div class="tab-item-time">(.*?)</div>\s*-->', html)
+                    if time_match:
+                        source_time = time_match.group(1).strip()
 
                     if name_el and price_el:
                         name = (await name_el.inner_text()).strip()
@@ -53,7 +62,8 @@ class GasScraper:
                                 "city": city['name'],
                                 "price": price,
                                 "fuel_type": "Regular",
-                                "updated_at": run_date
+                                "updated_at": run_date,
+                                "source_updated_at": source_time
                             })
                             city_stations.add(name)
 

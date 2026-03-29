@@ -42,7 +42,8 @@ async def run_scrape_and_analyze():
                 city=gp['city'],
                 price=gp['price'],
                 fuel_type=gp['fuel_type'],
-                updated_at=gp['updated_at']
+                updated_at=gp['updated_at'],
+                source_updated_at=gp['source_updated_at']
             ))
 
         if all_deals:
