@@ -71,66 +71,70 @@ class GeminiAnalyzer:
 
         try:
             response = self.model.generate_content(prompt)
-            # Remove markdown code block if present
-            text = response.text.strip()
-            if text.startswith("```json"):
-                text = text[7:]
-            if text.endswith("```"):
-                text = text[:-3]
-            
-            result = json.loads(text.strip())
-            
-            # Aggressive post-process to map AI categories to user-specified categories
-            category_map = {
-                "meat": "Meat and Seafood",
-                "seafood": "Meat and Seafood",
-                "meat and seafood": "Meat and Seafood",
-                "produce": "Produce",
-                "fruit": "Produce",
-                "vegetable": "Produce",
-                "vegetables": "Produce",
-                "deli": "Deli",
-                "bakery": "Pantry", # Map bakery to Pantry if not specified
-                "beverages": "Beverages",
-                "beverage": "Beverages",
-                "soda": "Beverages",
-                "drinks": "Beverages",
-                "pantry": "Pantry",
-                "dry goods": "Pantry",
-                "baking": "Pantry",
-                "dairy": "Dairy",
-                "diary": "Dairy",
-                "cheese": "Dairy",
-                "milk": "Dairy",
-                "canned goods": "Canned Goods",
-                "canned": "Canned Goods",
-                "soup": "Canned Goods",
-                "frozen": "Frozen",
-                "frozen foods": "Frozen",
-                "household": "Household",
-                "cleaning": "Household",
-                "personal care": "Household"
-            }
-
-            valid_categories = [
-                "Produce", "Meat and Seafood", "Deli", "Beverages", 
-                "Pantry", "Dairy", "Canned Goods", "Frozen", "Household"
-            ]
-
-            for d in result.get('scored_deals', []):
-                original_cat = d.get('category', 'Unknown')
-                cat_lower = original_cat.lower()
-                if original_cat not in valid_categories:
-                    if cat_lower in category_map:
-                        d['category'] = category_map[cat_lower]
-                    else:
-                        d['category'] = "Pantry"
-                    logger.info(f"Mapped category '{original_cat}' -> '{d['category']}' for item '{d.get('item_name')}'")
-            
+            result = self._parse_response(response.text)
+            self._map_categories(result)
             return result
         except Exception as e:
             logger.error(f"Error calling Gemini API: {e}")
             return self._mock_analyze(all_deals)
+
+    def _parse_response(self, text: str) -> Dict:
+        """Parse the raw text response from the Gemini API into a dictionary."""
+        text = text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+
+        return json.loads(text.strip())
+
+    def _map_categories(self, result: Dict) -> None:
+        """Map AI categories to user-specified categories in-place."""
+        category_map = {
+            "meat": "Meat and Seafood",
+            "seafood": "Meat and Seafood",
+            "meat and seafood": "Meat and Seafood",
+            "produce": "Produce",
+            "fruit": "Produce",
+            "vegetable": "Produce",
+            "vegetables": "Produce",
+            "deli": "Deli",
+            "bakery": "Pantry", # Map bakery to Pantry if not specified
+            "beverages": "Beverages",
+            "beverage": "Beverages",
+            "soda": "Beverages",
+            "drinks": "Beverages",
+            "pantry": "Pantry",
+            "dry goods": "Pantry",
+            "baking": "Pantry",
+            "dairy": "Dairy",
+            "diary": "Dairy",
+            "cheese": "Dairy",
+            "milk": "Dairy",
+            "canned goods": "Canned Goods",
+            "canned": "Canned Goods",
+            "soup": "Canned Goods",
+            "frozen": "Frozen",
+            "frozen foods": "Frozen",
+            "household": "Household",
+            "cleaning": "Household",
+            "personal care": "Household"
+        }
+
+        valid_categories = [
+            "Produce", "Meat and Seafood", "Deli", "Beverages",
+            "Pantry", "Dairy", "Canned Goods", "Frozen", "Household"
+        ]
+
+        for d in result.get('scored_deals', []):
+            original_cat = d.get('category', 'Unknown')
+            cat_lower = original_cat.lower()
+            if original_cat not in valid_categories:
+                if cat_lower in category_map:
+                    d['category'] = category_map[cat_lower]
+                else:
+                    d['category'] = "Pantry"
+                logger.info(f"Mapped category '{original_cat}' -> '{d['category']}' for item '{d.get('item_name')}'")
 
     def _mock_analyze(self, all_deals: List[Dict]) -> Dict:
         """
