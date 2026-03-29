@@ -9,6 +9,11 @@ from .models import Run, Deal, BestStore, FailedScrape
 
 logger = logging.getLogger(__name__)
 
+def _format_list_to_string(value):
+    if isinstance(value, list):
+        return "\n".join(value)
+    return value
+
 async def run_scrape_and_analyze():
     logger.info("Starting scheduled scrape job...")
     manager = ScraperManager()
@@ -38,13 +43,8 @@ async def run_scrape_and_analyze():
                 bs = analysis['best_store']
                 
                 # Ensure strengths/weaknesses are strings for SQLite
-                strengths = bs.get('strengths', '')
-                if isinstance(strengths, list):
-                    strengths = "\n".join(strengths)
-                
-                weaknesses = bs.get('weaknesses', '')
-                if isinstance(weaknesses, list):
-                    weaknesses = "\n".join(weaknesses)
+                strengths = _format_list_to_string(bs.get('strengths', ''))
+                weaknesses = _format_list_to_string(bs.get('weaknesses', ''))
 
                 db.add(BestStore(
                     run_id=new_run.id,
@@ -67,11 +67,12 @@ async def run_scrape_and_analyze():
                     explanation=d['explanation']
                 ))
             
-            db.commit()
             logger.info(f"Successfully finished scrape run {new_run.id}.")
         else:
             logger.warning("No deals found during scrape run.")
             
+        db.commit()
+
     except Exception as e:
         logger.error(f"Error in scheduled job: {e}")
     finally:

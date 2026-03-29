@@ -1,12 +1,14 @@
 from fastapi import FastAPI, Depends, Request, BackgroundTasks
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
+from collections import defaultdict
 from .database import get_db, init_db
-from .models import Run, Deal, BestStore, FailedScrape
+from .models import Run, Deal
 from .scheduler import start_scheduler, run_scrape_and_analyze
 import logging
+from collections import defaultdict
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -15,6 +17,11 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Franklin Flyers")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+_homepage_cache = {
+    "run_id": None,
+    "context": None
+}
 
 @app.on_event("startup")
 async def startup_event():
@@ -25,8 +32,12 @@ async def startup_event():
 async def read_root(request: Request, db: Session = Depends(get_db)):
     latest_run = db.query(Run).order_by(Run.run_date.desc()).first()
     
+    if latest_run and _homepage_cache["run_id"] == latest_run.id:
+        context = _homepage_cache["context"].copy()
+        context["request"] = request
+        return templates.TemplateResponse(request=request, name="index.html", context=context)
+
     context = {
-        "request": request,
         "has_data": latest_run is not None,
         "latest_run": latest_run,
         "failed_scrapes": [],
@@ -44,13 +55,16 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
         
         # Deals by category
         deals = db.query(Deal).filter(Deal.run_id == latest_run.id).all()
-        by_cat = {}
+        by_cat = defaultdict(list)
         for d in deals:
-            if d.category not in by_cat:
-                by_cat[d.category] = []
             by_cat[d.category].append(d)
-        context["deals_by_category"] = by_cat
+        context["deals_by_category"] = dict(by_cat)
 
+        # Update cache
+        _homepage_cache["run_id"] = latest_run.id
+        _homepage_cache["context"] = context.copy()
+
+    context["request"] = request
     return templates.TemplateResponse(request=request, name="index.html", context=context)
 
 @app.post("/api/refresh")
