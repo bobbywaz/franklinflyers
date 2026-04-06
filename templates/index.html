@@ -28,9 +28,9 @@
         'Foster\'s': 'bg-yellow-500'
     } %}
     {% set store_flyers = {
-        'ALDI': 'https://www.aldi.us/weekly-specials/our-weekly-ads/',
-        'Big Y': 'https://www.bigy.com/weeklyad/flyerview',
-        'Food City': 'https://www.foodcitymkt.com/weekly-ad',
+        'ALDI': 'https://info.aldi.us/weekly-specials/weekly-ads?zipCode=01301',
+        'Big Y': 'https://www.bigy.com/weekly-ad/flyerview',
+        'Food City': 'https://www.foodcitymkt.com/weekly-ad-1',
         'Stop & Shop': 'https://stopandshop.com/weekly-ad',
         'Foster\'s': 'https://www.fosterssupermarket.com/weekly-ad'
     } %}
@@ -258,7 +258,7 @@
                 {% endif %}
                 <p class="text-[10px] uppercase tracking-widest mt-2 text-gray-500 font-bold">&copy; 2026 Franklin Flyers. Local Intelligence.</p>
             </div>
-            <button onclick="triggerRefresh()" class="bg-gray-800 text-gray-200 py-1.5 px-4 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-gray-700 hover:text-white transition-all border border-gray-600">Admin Refresh</button>
+            <a href="/admin" class="bg-gray-800 text-gray-200 py-1.5 px-4 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-gray-700 hover:text-white transition-all border border-gray-600">Admin Dashboard</a>
         </footer>
     </div>
     <script>

@@ -3,8 +3,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from .database import get_db, init_db
-from .models import Run, Deal, BestStore, FailedScrape, GasPrice
+from .database import get_db, init_db, SessionLocal
+from .models import Run, Deal, BestStore, FailedScrape, GasPrice, Configuration
 from .scheduler import start_scheduler, run_scrape_and_analyze
 import logging
 import json
@@ -20,6 +20,18 @@ templates = Jinja2Templates(directory="templates")
 @app.on_event("startup")
 async def startup_event():
     init_db()
+    
+    # Initialize default admin password if not exists
+    db = SessionLocal()
+    try:
+        admin_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
+        if not admin_pass:
+            db.add(Configuration(key="admin_password", value="changeme"))
+            db.commit()
+            logger.info("Initialized default admin password 'changeme'")
+    finally:
+        db.close()
+        
     app.state.scheduler = start_scheduler()
 
 @app.get("/", response_class=HTMLResponse)
@@ -77,12 +89,54 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
 
     return templates.TemplateResponse(request=request, name="index.html", context=context)
 
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request, db: Session = Depends(get_db)):
+    return templates.TemplateResponse(request=request, name="admin.html", context={"request": request})
+
+@app.post("/admin/refresh")
+async def admin_refresh(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    form = await request.form()
+    password = form.get("password")
+    
+    stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
+    if not stored_pass or password != stored_pass.value:
+        return templates.TemplateResponse(request=request, name="admin.html", context={"request": request, "error": "Invalid password"})
+    
+    background_tasks.add_task(run_scrape_and_analyze)
+    return templates.TemplateResponse(request=request, name="admin.html", context={"request": request, "message": "Scrape process started in the background."})
+
+@app.post("/admin/change-password")
+async def admin_change_password(request: Request, db: Session = Depends(get_db)):
+    logger.info("Password change requested")
+    form = await request.form()
+    current_password = form.get("current_password")
+    new_password = form.get("new_password")
+    
+    try:
+        stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
+        if not stored_pass:
+            logger.error("Admin password configuration not found in DB")
+            return templates.TemplateResponse(request=request, name="admin.html", context={"request": request, "error": "Configuration error"})
+            
+        if current_password != stored_pass.value:
+            logger.warning("Invalid current password provided")
+            return templates.TemplateResponse(request=request, name="admin.html", context={"request": request, "error": "Invalid current password"})
+        
+        stored_pass.value = new_password
+        db.commit()
+        logger.info("Password updated successfully")
+        return templates.TemplateResponse(request=request, name="admin.html", context={"request": request, "message": "Password updated successfully."})
+    except Exception as e:
+        logger.error(f"Error changing password: {e}")
+        return templates.TemplateResponse(request=request, name="admin.html", context={"request": request, "error": f"Internal error: {e}"})
+
 @app.post("/api/refresh")
-async def trigger_refresh(background_tasks: BackgroundTasks, pin: str = None):
-    if pin != "8156":
+async def trigger_refresh(background_tasks: BackgroundTasks, pin: str = None, db: Session = Depends(get_db)):
+    stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
+    if pin != "8156" and (not stored_pass or pin != stored_pass.value):
         logger.warning(f"Unauthorized refresh attempt with PIN: {pin}")
         return JSONResponse(status_code=401, content={"message": "Unauthorized: Invalid PIN."})
     
-    logger.info("Manual refresh triggered with valid PIN.")
+    logger.info("Manual refresh triggered.")
     background_tasks.add_task(run_scrape_and_analyze)
     return {"message": "Scrape process started in the background."}

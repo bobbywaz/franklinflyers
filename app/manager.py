@@ -55,7 +55,8 @@ class ScraperManager:
             # Gas scraper
             try:
                 page = await context.new_page()
-                gas_prices = await self.gas_scraper.scrape(page, run_date=run_date)
+                found_gas = await self.gas_scraper.scrape(page, run_date=run_date)
+                gas_prices.extend(found_gas)
                 await page.close()
             except Exception as e:
                 logger.error(f"Gas Scraper failed: {e}")

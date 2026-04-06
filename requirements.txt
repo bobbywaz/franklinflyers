@@ -6,3 +6,5 @@ playwright
 apscheduler
 google-generativeai
 python-dotenv
+httpx
+python-multipart

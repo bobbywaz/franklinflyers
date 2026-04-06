@@ -4,13 +4,10 @@ Franklin Flyers is a Dockerized web application that automatically scrapes weekl
 
 ## Features
 - **Automated Scheduling:** Scrapes flyers automatically using background jobs (default: Mon & Thu at 2:00 AM).
-- **AI-Powered Evaluation:** Uses Gemini 2.5 Flash to categorize items, detect fake sales, and score true value out of 10.
+- **Vision-Powered Extraction:** Uses Gemini 2.5 Flash to "see" and extract deals from complex flyer PDFs and JS-heavy circulars, ensuring high accuracy and verification of store location and dates.
+- **AI-Powered Evaluation:** Uses Gemini to categorize items, detect fake sales, and score true value out of 10.
 - **"Best Store" Recommendation:** Identifies the overall best store to shop at for the week.
-- **Resilient Scraping:** Uses headless Chromium via Playwright to parse JS-heavy flyer pages.
-
-## Requirements
-- Docker & Docker Compose
-- A valid Google Gemini API Key
+- **Admin Dashboard:** Secure interface for manual refreshes and password management.
 
 ## Setup Instructions
 
@@ -19,10 +16,10 @@ Franklin Flyers is a Dockerized web application that automatically scrapes weekl
    ```bash
    cp .env.example .env
    ```
-   Open `.env` and replace `your_gemini_api_key_here` with your actual Gemini API key. You can also adjust the cron schedule variables if desired.
+   Open `.env` and replace `your_gemini_api_key_here` with your actual Gemini API key.
 
 2. **Build and Run:**
-   Bring up the Docker container. This will build the Python environment, download Chromium for Playwright, and start the FastAPI web server.
+   Bring up the Docker containers.
    ```bash
    docker-compose up -d --build
    ```
@@ -31,22 +28,28 @@ Franklin Flyers is a Dockerized web application that automatically scrapes weekl
    Open your browser and navigate to:
    http://localhost:8000
 
+## Admin Dashboard
+Access the admin dashboard at `http://localhost:8000/admin`.
+- **Default Password:** `changeme`
+- **Features:** 
+  - Trigger immediate data refresh (scrapes all stores and gas prices).
+  - Update admin password.
+
 ## Manual Trigger / Refresh
 To trigger an immediate flyer scrape:
-- **From the UI:** Click the "Refresh Now" button on the webpage.
+- **From Admin UI:** Go to `/admin`, enter your password, and click "Update Prices Now".
 - **From CLI:** You can manually ping the endpoint:
   ```bash
-  curl -X POST http://localhost:8000/api/refresh
+  curl -X POST http://localhost:8000/api/refresh?pin=your_admin_password
   ```
-*Note: The scrape takes several minutes as it launches a headless browser, waits for DOMs to load, and queries the Gemini API.*
+*Note: The scrape takes several minutes as it launches a headless browser, waits for content to load, and queries the Gemini API.*
 
 ## Troubleshooting
-- **No Deals Showing:** If a store changes its flyer viewer layout (e.g., switches to a different embedded PDF/JS vendor), the scraper may fail. Check the "Failed Scrapes" section in the UI. 
-- **Fixing Scrapers:** You will need to inspect the live website DOM and update the CSS selectors in the corresponding `app/scraper/adapters/*.py` file.
+- **No Deals Showing:** If a store changes its flyer viewer layout, the scraper may fail. Check the "Failed Scrapes" section in the UI. 
 - **Viewing Logs:**
   ```bash
   docker-compose logs -f web
   ```
 
 ## Adding More Stores
-To add a new store, create a new class inheriting from `BaseScraper` in `/app/scraper/adapters/`. Then, register your new scraper in `app/scraper/manager.py` by adding it to the `SCRAPERS` list.
+To add a new store, create a new class inheriting from `BaseScraper` in `app/scrapers/`. Then, register your new scraper in `app/manager.py` by adding it to the `self.scrapers` list.

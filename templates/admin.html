@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Franklin Flyers</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <div class="max-w-2xl mx-auto py-12 px-4">
+        <div class="flex items-center justify-between mb-8">
+            <h1 class="text-3xl font-bold text-white">Admin Dashboard</h1>
+            <a href="/" class="text-blue-400 hover:text-blue-300 transition-colors">← Back to Site</a>
+        </div>
+
+        {% if error %}
+        <div class="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded mb-6">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        {% if message %}
+        <div class="bg-green-900/50 border border-green-500 text-green-200 px-4 py-3 rounded mb-6">
+            {{ message }}
+        </div>
+        {% endif %}
+
+        <div class="grid gap-8">
+            <!-- Update Data Section -->
+            <section class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
+                <h2 class="text-xl font-semibold mb-4 text-white flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Trigger Data Refresh
+                </h2>
+                <p class="text-gray-400 mb-6 text-sm">This will start the scrapers for Food City, Stop & Shop, ALDI, Big Y, and Gas Buddy. This process takes about 1-2 minutes.</p>
+                
+                <form action="/admin/refresh" method="POST" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-1">Admin Password</label>
+                        <input type="password" name="password" required class="w-full bg-gray-900 border border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition-colors shadow-lg">
+                        Update Prices Now
+                    </button>
+                </form>
+            </section>
+
+            <!-- Change Password Section -->
+            <section class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
+                <h2 class="text-xl font-semibold mb-4 text-white flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                    </svg>
+                    Change Password
+                </h2>
+                <form action="/admin/change-password" method="POST" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-1">Current Password</label>
+                        <input type="password" name="current_password" required class="w-full bg-gray-900 border border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-1">New Password</label>
+                        <input type="password" name="new_password" required class="w-full bg-gray-900 border border-gray-700 rounded-lg py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                    </div>
+                    <button type="submit" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 rounded-lg transition-colors border border-gray-600">
+                        Update Password
+                    </button>
+                </form>
+            </section>
+        </div>
+        
+        <footer class="mt-12 text-center text-gray-500 text-xs">
+            &copy; 2026 Franklin Flyers • Greenfield & Turners Falls
+        </footer>
+    </div>
+</body>
+</html>

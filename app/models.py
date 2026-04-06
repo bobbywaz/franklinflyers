@@ -66,3 +66,9 @@ class GasPrice(Base):
     source_updated_at = Column(String)
     
     run = relationship("Run", back_populates="gas_prices")
+
+class Configuration(Base):
+    __tablename__ = 'configurations'
+    id = Column(Integer, primary_key=True)
+    key = Column(String, unique=True)
+    value = Column(String)
