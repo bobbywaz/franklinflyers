@@ -1,7 +1,6 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.database import Base
