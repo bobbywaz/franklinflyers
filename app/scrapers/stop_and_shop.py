@@ -1,5 +1,5 @@
 import logging
-import requests
+import httpx
 import os
 import json
 import asyncio
@@ -57,7 +57,8 @@ class StopAndShopScraper(BaseScraper):
             "maxTimeout": 60000
         }
         try:
-            response = requests.post(flaresolverr_url, json=payload, timeout=70).json()
+            async with httpx.AsyncClient() as client:
+                response = (await client.post(flaresolverr_url, json=payload, timeout=70.0)).json()
             if response.get('status') == 'ok':
                 return response['solution']['cookies'], response['solution']['userAgent']
         except Exception as e:
