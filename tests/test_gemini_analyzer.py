@@ -1,7 +1,7 @@
 import pytest
 import json
 from unittest.mock import patch, MagicMock, AsyncMock
-from app.gemini_analyzer import GeminiAnalyzer
+from app.gemini_analyzer import GeminiAnalyzer, _categorize_item
 
 # Simple test to verify pytest works
 def test_pytest():
@@ -135,3 +135,52 @@ async def test_analyze_deals_markdown_parsing():
     # Verify the markdown was stripped and JSON parsed correctly
     assert result["scored_deals"][0]["item_name"] == "Apples"
     assert result["best_store"]["score"] == 10
+
+def test_categorize_item():
+    """Test the categorization logic based on keywords."""
+    # Produce
+    assert _categorize_item("apple") == "Produce"
+    assert _categorize_item("fresh avocado") == "Produce"
+
+    # Meat
+    assert _categorize_item("ground beef") == "Meat"
+    assert _categorize_item("pork chop") == "Meat"
+
+    # Seafood
+    assert _categorize_item("fresh salmon") == "Seafood"
+    assert _categorize_item("shrimp") == "Seafood"
+
+    # Dairy
+    assert _categorize_item("milk") == "Dairy"
+    assert _categorize_item("cheddar cheese") == "Dairy"
+
+    # Beverages
+    assert _categorize_item("coca cola") == "Beverages"
+    assert _categorize_item("orange juice") == "Beverages"
+
+    # Bakery
+    assert _categorize_item("blueberry muffin") == "Bakery"
+    assert _categorize_item("wheat bread") == "Bakery"
+
+    # Pantry
+    assert _categorize_item("sugar") == "Pantry"
+    assert _categorize_item("wheat flour") == "Pantry"
+
+    # Deli
+    assert _categorize_item("sliced turkey") == "Deli"
+    assert _categorize_item("deli ham") == "Deli"
+
+    # Canned Goods
+    assert _categorize_item("canned soup") == "Canned Goods"
+    assert _categorize_item("black beans") == "Canned Goods"
+
+    # Frozen
+    assert _categorize_item("frozen pizza") == "Frozen"
+    assert _categorize_item("ice cream") == "Frozen"
+
+    # Household
+    assert _categorize_item("paper towels") == "Household"
+    assert _categorize_item("dish soap") == "Household"
+
+    # Fallback / Unknown
+    assert _categorize_item("unknown alien substance") == "Pantry"
