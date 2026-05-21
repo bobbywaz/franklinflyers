@@ -3,7 +3,7 @@ from playwright.async_api import Page
 import logging
 import asyncio
 import re
-import requests
+import httpx
 import json
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,8 @@ class GasScraper:
             "maxTimeout": 60000
         }
         try:
-            response = requests.post(self.flaresolverr_url, json=payload, timeout=70).json()
+            async with httpx.AsyncClient() as client:
+                response = (await client.post(self.flaresolverr_url, json=payload, timeout=70.0)).json()
             if response.get('status') == 'ok':
                 return response['solution']['cookies'], response['solution']['userAgent']
             else:
