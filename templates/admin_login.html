@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login - Franklin Flyers</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-4">
+    <div class="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/90 p-8 shadow-2xl">
+        <p class="text-xs uppercase tracking-[0.35em] text-cyan-400 font-bold mb-3">Protected Admin</p>
+        <h1 class="text-3xl font-extrabold text-white mb-2">Franklin Flyers</h1>
+        <p class="text-sm text-slate-400 mb-6">Enter the admin password to access scraper controls.</p>
+
+        {% if error %}
+        <div class="mb-5 rounded-2xl border border-rose-600/60 bg-rose-950/50 px-4 py-3 text-sm text-rose-200">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form action="/admin/login" method="POST" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Password</label>
+                <input type="password" name="password" required class="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500">
+            </div>
+            <button type="submit" class="w-full rounded-2xl bg-cyan-500 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-400 transition-colors">
+                Log In
+            </button>
+        </form>
+
+        <a href="/" class="mt-6 inline-block text-sm text-slate-400 hover:text-white transition-colors">Back to site</a>
+    </div>
+</body>
+</html>

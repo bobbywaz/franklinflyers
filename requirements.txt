@@ -4,7 +4,8 @@ sqlalchemy
 jinja2
 playwright
 apscheduler
-google-generativeai
+google-genai
 python-dotenv
 httpx
 python-multipart
+itsdangerous

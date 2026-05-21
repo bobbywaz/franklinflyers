@@ -1,21 +1,12 @@
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
+
 from app.manager import ScraperManager
 
-@pytest.fixture
-def mock_scrapers():
-    scraper1 = MagicMock()
-    scraper1.store_name = "Store1"
-    scraper1.scrape = AsyncMock(return_value=[{"name": "deal1", "price": "1.00"}])
-
-    scraper2 = MagicMock()
-    scraper2.store_name = "Store2"
-    scraper2.scrape = AsyncMock(side_effect=Exception("Scraping failed"))
-
-    return [scraper1, scraper2]
 
 @pytest.mark.asyncio
-async def test_run_all_scrapers(mock_scrapers):
+async def test_run_single_returns_keyed_success_result():
     mock_page = AsyncMock()
     mock_context = AsyncMock()
     mock_context.new_page.return_value = mock_page
@@ -24,27 +15,65 @@ async def test_run_all_scrapers(mock_scrapers):
     mock_playwright = AsyncMock()
     mock_playwright.chromium.launch.return_value = mock_browser
 
-    # Mock async context manager for async_playwright()
     mock_async_playwright_cm = MagicMock()
     mock_async_playwright_cm.__aenter__ = AsyncMock(return_value=mock_playwright)
     mock_async_playwright_cm.__aexit__ = AsyncMock(return_value=None)
 
-    with patch('app.manager.async_playwright', return_value=mock_async_playwright_cm):
+    payload = {
+        "scraper_key": "aldi",
+        "store_name": "ALDI",
+        "kind": "grocery",
+        "items_scraped_count": 42,
+        "deals": [{"name": "deal1", "price": "1.00", "description": "desc"}],
+    }
+
+    with patch("app.manager.async_playwright", return_value=mock_async_playwright_cm):
         manager = ScraperManager()
-        manager.scrapers = mock_scrapers
+        manager.registry = {"aldi": MagicMock(store_name="ALDI", scrape=AsyncMock(return_value=payload))}
+        manager.scraper_order = ["aldi"]
 
-        all_deals, failed_scrapes = await manager.run_all_scrapers()
+        result = await manager.run_single("aldi")
 
-        assert len(all_deals) == 1
-        assert all_deals[0]["name"] == "deal1"
-        assert all_deals[0]["store_name"] == "Store1"
+    assert result["status"] == "success"
+    assert result["scraper_key"] == "aldi"
+    assert result["payload"]["item_count"] == 1
+    assert result["payload"]["deal_count"] == 1
+    assert result["payload"]["items_scraped_count"] == 42
+    mock_browser.close.assert_called_once()
 
-        assert len(failed_scrapes) == 1
-        assert failed_scrapes[0]["store_name"] == "Store2"
-        assert "Scraping failed" in failed_scrapes[0]["error_message"]
 
-        mock_playwright.chromium.launch.assert_called_once_with(headless=True)
-        mock_browser.new_context.assert_called_once()
-        assert mock_context.new_page.call_count == 2
-        mock_page.close.assert_called_once()
-        mock_browser.close.assert_called_once()
+@pytest.mark.asyncio
+async def test_run_full_batch_returns_success_and_failure_results():
+    mock_page = AsyncMock()
+    mock_context = AsyncMock()
+    mock_context.new_page.return_value = mock_page
+    mock_browser = AsyncMock()
+    mock_browser.new_context.return_value = mock_context
+    mock_playwright = AsyncMock()
+    mock_playwright.chromium.launch.return_value = mock_browser
+
+    mock_async_playwright_cm = MagicMock()
+    mock_async_playwright_cm.__aenter__ = AsyncMock(return_value=mock_playwright)
+    mock_async_playwright_cm.__aexit__ = AsyncMock(return_value=None)
+
+    good_scraper = MagicMock(
+        store_name="Store1",
+        scrape=AsyncMock(return_value={"scraper_key": "store1", "store_name": "Store1", "kind": "grocery", "deals": [{"name": "deal1", "price": "1.00"}]}),
+    )
+    bad_scraper = MagicMock(store_name="Store2", scrape=AsyncMock(side_effect=Exception("Scraping failed")))
+
+    with patch("app.manager.async_playwright", return_value=mock_async_playwright_cm):
+        manager = ScraperManager()
+        manager.registry = {"store1": good_scraper, "store2": bad_scraper}
+        manager.scraper_order = ["store1", "store2"]
+
+        results = await manager.run_full_batch()
+
+    assert len(results) == 2
+    assert results[0]["status"] == "success"
+    assert results[0]["payload"]["item_count"] == 1
+    assert results[0]["payload"]["items_scraped_count"] == 1
+    assert results[1]["status"] == "failed"
+    assert "Scraping failed" in results[1]["error_message"]
+    assert mock_context.new_page.call_count == 2
+    assert mock_browser.close.called

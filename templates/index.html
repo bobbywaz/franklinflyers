@@ -28,10 +28,10 @@
         'Foster\'s': 'bg-yellow-500'
     } %}
     {% set store_flyers = {
-        'ALDI': 'https://info.aldi.us/weekly-specials/weekly-ads?zipCode=01301',
+        'ALDI': 'https://info.aldi.us/weekly-specials/weekly-ads?zipCode=01376',
         'Big Y': 'https://www.bigy.com/weekly-ad/flyerview',
         'Food City': 'https://www.foodcitymkt.com/weekly-ad-1',
-        'Stop & Shop': 'https://stopandshop.com/weekly-ad',
+        'Stop & Shop': 'https://stopandshop.com/weekly-ad?storeCode=0442',
         'Foster\'s': 'https://www.fosterssupermarket.com/weekly-ad'
     } %}
     <div class="max-w-6xl mx-auto relative z-10">
@@ -39,7 +39,17 @@
             <div class="flex flex-col items-start">
                 <img src="/static/images/logo.png" alt="Franklin Flyers Logo" class="h-48 w-auto object-contain brightness-110">
             </div>
-            <div class="text-right flex flex-col items-end max-w-md">
+            <div class="text-right flex flex-col items-end max-w-2xl">
+                {% if active_store_badges %}
+                <p class="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-1">Current Store Flyers</p>
+                <div class="flex flex-wrap justify-end gap-2 mb-3">
+                    {% for badge in active_store_badges %}
+                    <a href="{{ badge.flyer_url }}" target="_blank" class="{{ store_colors.get(badge.name, 'bg-slate-700') }} text-white rounded-full px-3 py-1 text-[10px] font-bold shadow-md hover:brightness-110 transition-all">
+                        {{ badge.name }}{% if badge.range_label %} {{ badge.range_label }}{% endif %}
+                    </a>
+                    {% endfor %}
+                </div>
+                {% endif %}
                 <p class="text-sm text-blue-400 font-bold uppercase tracking-widest mb-1">AI-Scored Grocery Deals</p>
                 <p class="text-xs text-gray-400 mb-0 italic leading-relaxed">
                     Scraping weekly flyers across Greenfield and Turners Falls. Our AI analyzes local price trends and item quality to identify genuine value.
@@ -47,25 +57,16 @@
             </div>
         </header>
 
+
         {% if not has_data %}
         <div class="bg-slate-900/50 backdrop-blur-md border border-slate-800 p-12 rounded-xl shadow-2xl text-center">
             <p class="text-xl text-slate-400 font-light mb-6">No flyer data analyzed yet.</p>
-            <p class="text-sm text-slate-500 italic">Click Admin Refresh in the footer to start the first scrape.</p>
+            <p class="text-sm text-slate-500 italic">Log into Admin and use the Full Run control to publish the first snapshot.</p>
         </div>
         {% else %}
         
-        {% if failed_scrapes %}
-        <div class="bg-red-950/30 backdrop-blur-md border border-red-900/50 text-red-200 p-4 rounded-lg mb-10">
-            <div class="flex items-center mb-2">
-                <span class="text-red-500 mr-2">⚠️</span>
-                <strong class="font-bold">Scrape Interruptions:</strong>
-            </div>
-            <ul class="list-disc ml-8 text-sm opacity-80">
-                {% for fail in failed_scrapes %}<li>{{ fail.store_name }}: {{ fail.error_message }}</li>{% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-
+        
+        {% if top_overall %}
         <section class="mb-10">
             <h2 class="text-2xl font-bold mb-4 text-white">🔥 Top 6 Deals Overall</h2>
             <div class="border-t-8 border-red-600 rounded-t-lg"></div>
@@ -85,7 +86,9 @@
                 </div>
             </div>
         </section>
+        {% endif %}
 
+        {% if deals_by_category %}
         <section class="mb-10">
             <h2 class="text-2xl font-bold mb-4 text-white">🛒 Top Deals by Category</h2>
             <div class="border-t-8 border-red-600 rounded-t-lg"></div>
@@ -111,6 +114,7 @@
                 {% endfor %}
             </div>
         </section>
+        {% endif %}
 
         {% if best_store %}
         <section class="mb-10">
@@ -123,6 +127,15 @@
                     <p><strong class="text-red-700">Weaknesses:</strong> {{ best_store.weaknesses }}</p>
                 </div>
                 <p class="text-right text-sm text-green-700 font-bold mt-4">Confidence Score: {{ best_store.score }}/10</p>
+            </div>
+        </section>
+        {% endif %}
+
+        {% if not top_overall and not deals_by_category and active_store_badges %}
+        <section class="mb-10">
+            <div class="bg-slate-900/50 backdrop-blur-md border border-slate-800 p-8 rounded-xl shadow-2xl text-center">
+                <p class="text-lg text-slate-300 font-medium mb-3">Store data is active, but the combined homepage snapshot has not been republished yet.</p>
+                <p class="text-sm text-slate-500 italic">Use the Full Run control from Admin to refresh the ranked site-wide analysis.</p>
             </div>
         </section>
         {% endif %}
@@ -207,6 +220,7 @@
         </section>
         {% endif %}
 
+        {% if gas_by_city %}
         <section class="mb-10">
             <h2 class="text-2xl font-bold mb-4 text-white">⛽ Local Gas Prices</h2>
             <div class="border-t-8 border-blue-600 rounded-t-lg"></div>
@@ -239,43 +253,24 @@
                         </div>
                     </div>
                     {% endfor %}
-                    
-                    {% if not gas_by_city %}
-                    <div class="col-span-2 text-center py-8 text-gray-400 italic">
-                        No gas price data available for this run.
-                    </div>
-                    {% endif %}
                 </div>
             </div>
         </section>
+        {% endif %}
 
         {% endif %}
 
         <footer class="mt-16 border-t border-gray-700 pt-8 flex justify-between items-center text-gray-400">
             <div>
                 {% if has_data %}
-                <p class="text-xs font-semibold text-gray-300">Last Run: {{ latest_run.run_date.strftime('%Y-%m-%d %H:%M') }} UTC</p>
+                {% if latest_run %}
+                <p class="text-xs font-semibold text-gray-300">Last Published Snapshot: {{ latest_run.run_date.strftime('%Y-%m-%d %H:%M') }} UTC</p>
+                {% endif %}
                 {% endif %}
                 <p class="text-[10px] uppercase tracking-widest mt-2 text-gray-500 font-bold">&copy; 2026 Franklin Flyers. Local Intelligence.</p>
             </div>
             <a href="/admin" class="bg-gray-800 text-gray-200 py-1.5 px-4 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-gray-700 hover:text-white transition-all border border-gray-600">Admin Dashboard</a>
         </footer>
     </div>
-    <script>
-        function triggerRefresh() {
-            const pin = prompt("Enter Admin PIN to trigger refresh:");
-            if (pin) {
-                fetch(`/api/refresh?pin=${pin}`, { method: 'POST' })
-                    .then(res => {
-                        if (res.status === 401) {
-                            alert("Unauthorized: Invalid PIN.");
-                            return;
-                        }
-                        return res.json().then(data => alert(data.message));
-                    })
-                    .catch(err => alert("Error: " + err));
-            }
-        }
-    </script>
 </body>
 </html>

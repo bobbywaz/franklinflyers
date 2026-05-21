@@ -1,147 +1,201 @@
+import datetime
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.database import Base
-from app.models import Run, Deal, BestStore, FailedScrape
-from app.scheduler import run_scrape_and_analyze
+from app.models import Deal, FailedScrape, Run, StoreDataset
+from app.scheduler import run_full_scrape, run_single_scrape
+from app.store_utils import get_active_dataset_by_key
 
-# Test database setup
+
+def future_window():
+    start = datetime.date.today()
+    end = start + datetime.timedelta(days=6)
+    now = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+    expires = now + datetime.timedelta(days=6)
+    next_refresh = now + datetime.timedelta(days=5)
+    return start, end, expires, next_refresh
+
+
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 @pytest.fixture(scope="function")
 def db_session():
-    # Create the tables
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
     try:
         yield session
     finally:
         session.close()
-        # Drop the tables after the test
         Base.metadata.drop_all(bind=engine)
+
 
 @pytest.fixture(scope="function")
 def mock_session_local(db_session):
-    with patch("app.scheduler.SessionLocal", return_value=db_session) as mock:
-        yield mock
+    with patch("app.scheduler.SessionLocal", return_value=db_session):
+        yield
+
 
 @pytest.fixture(scope="function")
-def mock_manager():
-    with patch("app.scheduler.ScraperManager") as MockManager:
-        manager_instance = MockManager.return_value
-        manager_instance.run_all_scrapers = AsyncMock()
-        yield manager_instance
+def mock_sync_jobs():
+    with patch("app.scheduler._sync_dynamic_refresh_jobs"):
+        yield
 
-@pytest.fixture(scope="function")
-def mock_analyzer():
-    with patch("app.scheduler.GeminiAnalyzer") as MockAnalyzer:
-        analyzer_instance = MockAnalyzer.return_value
-        analyzer_instance.analyze_deals = AsyncMock()
-        yield analyzer_instance
 
 @pytest.mark.asyncio
-async def test_run_scrape_and_analyze_success(mock_session_local, db_session, mock_manager, mock_analyzer):
-    # Setup mock returns
-    mock_deals = [
-        {"store_name": "Store A", "name": "Apple", "price": "1.00", "description": "Crisp"}
-    ]
-    mock_failed_scrapes = [
-        {"store_name": "Store B", "error_message": "Timeout"}
+async def test_run_full_scrape_persists_individual_results_and_publishes_snapshot(mock_session_local, mock_sync_jobs, db_session):
+    flyer_start, flyer_end, expires_at, next_refresh_at = future_window()
+    full_results = [
+        {
+            "scraper_key": "aldi",
+            "store_name": "ALDI",
+            "kind": "grocery",
+            "status": "success",
+            "error_message": None,
+            "payload": {
+                "scraper_key": "aldi",
+                "store_name": "ALDI",
+                "kind": "grocery",
+                "deals": [{"name": "Apple", "price": "1.00", "description": "Crisp"}],
+                "item_count": 1,
+                "items_scraped_count": 48,
+                "flyer_start_date": flyer_start,
+                "flyer_end_date": flyer_end,
+                "expires_at": expires_at,
+                "next_refresh_at": next_refresh_at,
+                "date_source": "extracted",
+            },
+        },
+        {
+            "scraper_key": "big_y",
+            "store_name": "Big Y",
+            "kind": "grocery",
+            "status": "failed",
+            "error_message": "Timeout",
+            "payload": None,
+        },
     ]
 
-    # Manager returns deals and fails
-    mock_manager.run_all_scrapers.return_value = (mock_deals, mock_failed_scrapes)
-
-    # Analyzer returns scored deals and best store
-    mock_analysis_result = {
-        "scored_deals": [
-            {
-                "store_name": "Store A",
-                "item_name": "Apple",
-                "sale_price": "1.00",
-                "category": "Produce",
-                "score": 9,
-                "explanation": "Great deal"
+    with patch("app.scheduler.ScraperManager") as MockManager, patch("app.scheduler.GeminiAnalyzer") as MockAnalyzer:
+        MockManager.return_value.run_full_batch = AsyncMock(return_value=full_results)
+        MockAnalyzer.return_value.analyze_deals = AsyncMock(
+            return_value={
+                "scored_deals": [
+                    {
+                        "store_name": "ALDI",
+                        "item_name": "Apple",
+                        "sale_price": "1.00",
+                        "category": "Produce",
+                        "score": 9,
+                        "explanation": "Great deal",
+                    }
+                ],
+                "best_store": {
+                    "store_name": "ALDI",
+                    "summary": "Best value",
+                    "strengths": ["Produce"],
+                    "weaknesses": ["Limited"],
+                    "score": 8,
+                },
             }
-        ],
-        "best_store": {
-            "store_name": "Store A",
-            "summary": "Best value",
-            "strengths": ["Produce", "Dairy"],
-            "weaknesses": ["Meat"],
-            "score": 8
-        }
+        )
+
+        run = await run_full_scrape(trigger_mode="scheduled_full")
+
+    assert run is not None
+    assert db_session.query(StoreDataset).count() == 2
+    assert db_session.query(StoreDataset).filter(StoreDataset.scraper_key == "aldi").first().items_scraped_count == 48
+    assert db_session.query(Run).count() == 1
+    assert db_session.query(Deal).count() == 1
+    assert db_session.query(FailedScrape).count() == 1
+    assert db_session.query(FailedScrape).first().store_name == "Big Y"
+
+
+@pytest.mark.asyncio
+async def test_run_single_scrape_publishes_when_store_was_missing(mock_session_local, mock_sync_jobs, db_session):
+    flyer_start, flyer_end, expires_at, next_refresh_at = future_window()
+    result = {
+        "scraper_key": "aldi",
+        "store_name": "ALDI",
+        "kind": "grocery",
+        "status": "success",
+        "error_message": None,
+        "payload": {
+            "scraper_key": "aldi",
+            "store_name": "ALDI",
+            "kind": "grocery",
+            "deals": [{"name": "Apple", "price": "1.00", "description": "Crisp"}],
+            "item_count": 1,
+            "items_scraped_count": 48,
+            "flyer_start_date": flyer_start,
+            "flyer_end_date": flyer_end,
+            "expires_at": expires_at,
+            "next_refresh_at": next_refresh_at,
+            "date_source": "extracted",
+        },
     }
-    mock_analyzer.analyze_deals.return_value = mock_analysis_result
 
-    # Run the function
-    await run_scrape_and_analyze()
+    with patch("app.scheduler.ScraperManager") as MockManager, patch("app.scheduler.GeminiAnalyzer") as MockAnalyzer:
+        MockManager.return_value.run_single = AsyncMock(return_value=result)
+        MockAnalyzer.return_value.analyze_deals = AsyncMock(
+            return_value={"scored_deals": [], "best_store": None}
+        )
 
-    # Verify the results in DB
-    runs = db_session.query(Run).all()
-    assert len(runs) == 1
-    run = runs[0]
+        await run_single_scrape("aldi", trigger_mode="manual_single")
 
-    fails = db_session.query(FailedScrape).all()
-    assert len(fails) == 1
-    assert fails[0].store_name == "Store B"
-    assert fails[0].error_message == "Timeout"
-    assert fails[0].run_id == run.id
+    latest_dataset = db_session.query(StoreDataset).order_by(StoreDataset.id.desc()).first()
+    assert latest_dataset is not None
+    assert latest_dataset.status == "success"
+    assert db_session.query(StoreDataset).count() == 1
+    assert db_session.query(Run).count() == 1
 
-    best_stores = db_session.query(BestStore).all()
-    assert len(best_stores) == 1
-    assert best_stores[0].store_name == "Store A"
-    assert best_stores[0].strengths == "Produce\nDairy"
-    assert best_stores[0].weaknesses == "Meat"
-    assert best_stores[0].run_id == run.id
-
-    deals = db_session.query(Deal).all()
-    assert len(deals) == 1
-    assert deals[0].store_name == "Store A"
-    assert deals[0].item_name == "Apple"
-    assert deals[0].score == 9
-    assert deals[0].run_id == run.id
 
 @pytest.mark.asyncio
-async def test_run_scrape_and_analyze_no_deals(mock_session_local, db_session, mock_manager, mock_analyzer):
-    # Manager returns empty deals but has a failed scrape
-    mock_manager.run_all_scrapers.return_value = ([], [{"store_name": "Store C", "error_message": "Network error"}])
+async def test_failed_single_scrape_keeps_previous_active_data(mock_session_local, mock_sync_jobs, db_session):
+    success_result = {
+        "scraper_key": "aldi",
+        "store_name": "ALDI",
+        "kind": "grocery",
+        "status": "success",
+        "error_message": None,
+        "payload": {
+            "scraper_key": "aldi",
+            "store_name": "ALDI",
+            "kind": "grocery",
+            "deals": [{"name": "Apple", "price": "1.00", "description": "Crisp"}],
+            "item_count": 1,
+            "items_scraped_count": 48,
+            "flyer_start_date": datetime.date.today(),
+            "flyer_end_date": datetime.date.today() + datetime.timedelta(days=6),
+            "expires_at": datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + datetime.timedelta(days=6),
+            "next_refresh_at": datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + datetime.timedelta(days=5),
+            "date_source": "guessed",
+        },
+    }
+    failed_result = {
+        "scraper_key": "aldi",
+        "store_name": "ALDI",
+        "kind": "grocery",
+        "status": "failed",
+        "error_message": "No data returned",
+        "payload": None,
+    }
 
-    await run_scrape_and_analyze()
+    with patch("app.scheduler.ScraperManager") as MockManager, patch("app.scheduler.GeminiAnalyzer") as MockAnalyzer:
+        MockAnalyzer.return_value.analyze_deals = AsyncMock(return_value={"scored_deals": [], "best_store": None})
+        manager_instance = MockManager.return_value
+        manager_instance.run_single = AsyncMock(side_effect=[success_result, failed_result])
 
-    # Analyzer should not be called
-    mock_analyzer.analyze_deals.assert_not_called()
+        await run_single_scrape("aldi", trigger_mode="manual_single")
+        await run_single_scrape("aldi", trigger_mode="manual_single")
 
-    # Verify DB
-    runs = db_session.query(Run).all()
-    assert len(runs) == 1
-
-    fails = db_session.query(FailedScrape).all()
-    assert len(fails) == 1
-    assert fails[0].store_name == "Store C"
-
-    # Should have no deals or best store
-    assert len(db_session.query(Deal).all()) == 0
-    assert len(db_session.query(BestStore).all()) == 0
-
-@pytest.mark.asyncio
-async def test_run_scrape_and_analyze_exception(mock_session_local, db_session, mock_manager, mock_analyzer):
-    # Manager throws an exception
-    mock_manager.run_all_scrapers.side_effect = Exception("Critical network failure")
-
-    # Should not raise, just log the error and cleanup DB session
-    await run_scrape_and_analyze()
-
-    # Run should be created before exception
-    runs = db_session.query(Run).all()
-    assert len(runs) == 1
-
-    # But no deals/fails since it crashed
-    assert len(db_session.query(FailedScrape).all()) == 0
-    assert len(db_session.query(Deal).all()) == 0
-    assert len(db_session.query(BestStore).all()) == 0
+    active_dataset = get_active_dataset_by_key(db_session, "aldi")
+    assert active_dataset is not None
+    assert active_dataset.status == "success"
+    assert db_session.query(StoreDataset).count() == 2

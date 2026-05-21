@@ -3,7 +3,7 @@ import json
 import logging
 import random
 from typing import List, Dict
-import google.generativeai as genai
+from google import genai
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +54,9 @@ class GeminiAnalyzer:
             self.mock_mode = True
         else:
             try:
-                genai.configure(api_key=self.api_key)
+                self.client = genai.Client(api_key=self.api_key)
                 # Use Gemini 2.5 Flash as identified in 2026
-                self.model = genai.GenerativeModel('gemini-2.5-flash')
+                pass  # model instantiation removed
                 self.mock_mode = False
             except Exception as e:
                 logger.error(f"Failed to configure Gemini API: {e}. Using MOCK mode.")
@@ -141,7 +141,7 @@ class GeminiAnalyzer:
         """
 
         try:
-            response = await self.model.generate_content_async(prompt)
+            response = await self.client.aio.models.generate_content(model='gemini-2.5-flash', contents=prompt)
             # Remove markdown code block if present
             text = response.text.strip()
             logger.info(f"Raw Gemini Response: {text[:500]}...") # Log first 500 chars
@@ -241,7 +241,7 @@ class GeminiAnalyzer:
         """
 
         try:
-            response = self.model.generate_content(prompt)
+            response = self.client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
             text = response.text.strip()
             if text.startswith("```json"):
                 text = text[7:]

@@ -1,6 +1,8 @@
 # Franklin Flyers
 
-Franklin Flyers is a Dockerized web application that automatically scrapes weekly grocery flyers for the Greenfield / Turners Falls area in Massachusetts. It uses the Gemini API to evaluate and score items, identifying genuine deals based on value and recent regional pricing trends.
+For current architecture and scraper handoff notes, read `AGENTS.md` first. This repository has moved beyond some of the older README assumptions.
+
+Scraping weekly flyers across Greenfield and Turners Falls. Our AI analyzes local price trends and item quality to identify genuine value.
 
 ## Features
 - **Automated Scheduling:** Scrapes flyers automatically using background jobs (default: Mon & Thu at 2:00 AM).
@@ -10,6 +12,9 @@ Franklin Flyers is a Dockerized web application that automatically scrapes weekl
 - **Admin Dashboard:** Secure interface for manual refreshes and password management.
 
 ## Setup Instructions
+
+### PREFACE
+At any given t
 
 1. **Configure Environment:**
    Copy the example environment file and insert your API key.

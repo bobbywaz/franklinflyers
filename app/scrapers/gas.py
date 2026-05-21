@@ -5,10 +5,14 @@ import asyncio
 import re
 import requests
 import json
+from ..store_utils import build_gas_result
 
 logger = logging.getLogger(__name__)
 
 class GasScraper:
+    scraper_key = "gas"
+    store_name = "Gas Prices"
+
     def __init__(self):
         # GasBuddy city pages
         self.cities = [
@@ -38,7 +42,7 @@ class GasScraper:
             logger.error(f"FlareSolverr request failed: {e}")
         return None, None
 
-    async def scrape(self, page: Page, run_date: str = None) -> List[Dict]:
+    async def scrape(self, page: Page, run_date: str = None) -> Dict:
         """
         Scrape gas prices from GasBuddy, extracting from Apollo state for real-time data.
         """
@@ -178,4 +182,4 @@ class GasScraper:
             except Exception as e:
                 logger.error(f"Error scraping {city['name']}: {e}")
         
-        return all_prices
+        return build_gas_result(self.scraper_key, self.store_name, all_prices)

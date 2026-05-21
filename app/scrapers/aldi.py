@@ -1,103 +1,116 @@
 import logging
-import httpx
 import os
 import json
 import asyncio
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from .base import BaseScraper
-from typing import List, Dict
+from typing import Dict, Optional
 from playwright.async_api import Page
+from ..store_utils import parse_gemini_json
 
 logger = logging.getLogger(__name__)
 
 class AldiScraper(BaseScraper):
     store_name = "ALDI"
+    scraper_key = "aldi"
+    zip_code = "01376"
 
-    async def scrape(self, page: Page) -> List[Dict]:
+    async def scrape(self, page: Page) -> Optional[Dict]:
         logger.info(f"Navigating to {self.store_name} Greenfield weekly ad...")
-        
-        # ALDI's weekly ad URL for the Greenfield area (ZIP 01301)
-        # Adding zipCode parameter directly to the URL
-        url = "https://info.aldi.us/weekly-specials/weekly-ads?zipCode=01301"
-        
+
+        url = f"https://info.aldi.us/weekly-specials/weekly-ads?zipCode={self.zip_code}"
+
         try:
-            await page.goto(url, wait_until="networkidle", timeout=60000)
-            
-            # Wait for the Flipp/circular widget to load
-            # ALDI can be slow to render the flyer content
-            await page.wait_for_timeout(10000)
-            
-            # Take a screenshot of the flyer area
+            await page.set_viewport_size({"width": 1600, "height": 2400})
+            await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            await page.wait_for_timeout(4000)
+
+            await self._dismiss_cookie_banner(page)
+            await self._load_greenfield_flyer(page)
+
             screenshot_path = "/tmp/aldi_flyer.png"
-            # We want to capture enough of the flyer to see deals and dates
-            await page.screenshot(path=screenshot_path, full_page=False)
+            await page.frame_locator('iframe[title="Main Panel"]').locator("canvas").first.screenshot(path=screenshot_path)
             logger.info(f"Captured ALDI flyer screenshot to {screenshot_path}")
 
-            # Use Gemini to analyze the screenshot
-            deals = await self._analyze_screenshot_with_gemini(screenshot_path)
-            
-            # If vision fails or returns very few deals, we could try a fallback
-            # but usually vision is robust for these complex JS flyers
-            return deals
+            analysis = await self._analyze_screenshot_with_gemini(screenshot_path)
+            if analysis is None:
+                return None
+            return self.build_result(analysis)
 
         except Exception as e:
             logger.error(f"Error scraping ALDI: {e}")
-            return []
+            return None
 
-    async def _analyze_screenshot_with_gemini(self, image_path: str) -> List[Dict]:
+    async def _dismiss_cookie_banner(self, page: Page) -> None:
+        try:
+            await page.get_by_role("button", name="Accept All").click(timeout=5000)
+            await page.wait_for_timeout(1000)
+        except Exception:
+            logger.info("ALDI cookie banner was not shown or could not be dismissed")
+
+    async def _load_greenfield_flyer(self, page: Page) -> None:
+        info_frame = page.frame_locator('iframe[title="Information Panel"]')
+        main_frame = page.frame_locator('iframe[title="Main Panel"]')
+
+        zip_input = info_frame.get_by_placeholder("Enter your ZIP Code")
+        await zip_input.wait_for(timeout=15000)
+        await zip_input.fill(self.zip_code)
+        await info_frame.get_by_role("button", name="Find Stores").click()
+
+        greenfield_result = info_frame.locator("text=Aldi, Greenfield")
+        await greenfield_result.wait_for(timeout=15000)
+        await info_frame.get_by_role("button", name="Select").first.click()
+
+        await main_frame.locator("text=Selected").first.wait_for(timeout=20000)
+        await page.wait_for_timeout(3000)
+
+    async def _analyze_screenshot_with_gemini(self, image_path: str) -> Optional[Dict]:
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             logger.error("GEMINI_API_KEY not set")
-            return []
+            return None
 
         try:
-            genai.configure(api_key=api_key)
+            client = genai.Client(api_key=api_key)
             # Use 2.5 flash as it's the latest confirmed working model in our tests
-            model = genai.GenerativeModel('gemini-2.5-flash')
+            pass  # model instantiation removed
             
             with open(image_path, "rb") as f:
                 image_data = f.read()
             
             image_parts = [
-                {
-                    "mime_type": "image/png",
-                    "data": image_data
-                }
+                types.Part.from_bytes(data=image_data, mime_type="image/png")
             ]
             
             prompt = """
-            Extract the top 15-20 grocery deals from this ALDI flyer screenshot.
-            Crucially, look for the DATES on the flyer (e.g. "Valid April 1 - April 7") to ensure it is for the current week (early April 2026).
-            If the flyer is for a different week, please still extract the deals but note the dates in the description.
-            Also verify if it mentions 'Greenfield' or '01301'.
+            Extract the top 15-20 grocery deals from this ALDI flyer screenshot and identify the flyer validity dates.
+            Also verify if it mentions 'Greenfield' or '01376'.
 
-            For each deal, provide:
+            Return ONLY a JSON object with:
+            - items_scraped: the total number of distinct priced items you read across the flyer before choosing the best deals
+            - flyer_start_date: the flyer start date in YYYY-MM-DD when possible
+            - flyer_end_date: the flyer end date in YYYY-MM-DD when possible
+            - deals: a JSON list of objects
+
+            Each deal object must include:
             - name: The name of the item
             - price: The sale price (e.g. "$1.99", "$2.49/lb", "2 for $5")
             - description: Any additional details like size, brand, or 'ALDI Find' status (e.g. "1 lb pkg", "Specially Selected")
-
-            Return the data ONLY as a JSON list of objects.
             """
             
             logger.info("Extracting ALDI deals from screenshot with Gemini...")
-            response = await asyncio.to_thread(model.generate_content, [prompt, image_parts[0]])
-            
-            text = response.text.strip()
-            # Clean up potential markdown formatting
-            if "```json" in text:
-                text = text.split("```json")[1].split("```")[0].strip()
-            elif "```" in text:
-                text = text.split("```")[1].split("```")[0].strip()
+            response = await asyncio.to_thread(client.models.generate_content, model='gemini-2.5-flash', contents=[prompt, image_parts[0]])
             
             try:
-                deals = json.loads(text)
-                logger.info(f"Successfully extracted {len(deals)} deals from ALDI screenshot")
-                return deals
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse Gemini JSON for ALDI: {e}. Raw text: {text[:200]}...")
-                return []
+                parsed = parse_gemini_json(response.text)
+                deal_count = len(parsed.get("deals", parsed if isinstance(parsed, list) else []))
+                logger.info(f"Successfully extracted {deal_count} deals from ALDI screenshot")
+                return parsed
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.error(f"Failed to parse Gemini JSON for ALDI: {e}. Raw text: {response.text[:200]}...")
+                return None
             
         except Exception as e:
             logger.error(f"Error analyzing ALDI screenshot with Gemini: {e}")
-            # Fallback placeholder if Gemini fails during development
-            return []
+            return None
