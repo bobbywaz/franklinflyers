@@ -43,8 +43,8 @@ async def run_scrape_and_analyze():
 
         # Save gas prices
         logger.info("Saving gas prices to database...")
-        for gp in gas_prices:
-            db.add(GasPrice(
+        gas_price_objects = [
+            GasPrice(
                 run_id=new_run.id,
                 station_name=gp['station_name'],
                 address=gp['address'],
@@ -53,7 +53,10 @@ async def run_scrape_and_analyze():
                 fuel_type=gp['fuel_type'],
                 updated_at=gp['updated_at'],
                 source_updated_at=gp['source_updated_at']
-            ))
+            ) for gp in gas_prices
+        ]
+        if gas_price_objects:
+            db.bulk_save_objects(gas_price_objects)
 
         if all_deals:
             logger.info("Starting Gemini AI analysis of grocery deals...")
