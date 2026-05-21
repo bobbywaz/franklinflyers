@@ -34,26 +34,24 @@ async def run_scrape_and_analyze():
         
         if failed_scrapes:
             logger.warning(f"{len(failed_scrapes)} scrapers failed: {[f['store_name'] for f in failed_scrapes]}")
-            for fail in failed_scrapes:
-                db.add(FailedScrape(
-                    run_id=new_run.id,
-                    store_name=fail['store_name'],
-                    error_message=fail['error_message']
-                ))
+            db.add_all([FailedScrape(
+                run_id=new_run.id,
+                store_name=fail['store_name'],
+                error_message=fail['error_message']
+            ) for fail in failed_scrapes])
 
         # Save gas prices
         logger.info("Saving gas prices to database...")
-        for gp in gas_prices:
-            db.add(GasPrice(
-                run_id=new_run.id,
-                station_name=gp['station_name'],
-                address=gp['address'],
-                city=gp['city'],
-                price=gp['price'],
-                fuel_type=gp['fuel_type'],
-                updated_at=gp['updated_at'],
-                source_updated_at=gp['source_updated_at']
-            ))
+        db.add_all([GasPrice(
+            run_id=new_run.id,
+            station_name=gp['station_name'],
+            address=gp['address'],
+            city=gp['city'],
+            price=gp['price'],
+            fuel_type=gp['fuel_type'],
+            updated_at=gp['updated_at'],
+            source_updated_at=gp['source_updated_at']
+        ) for gp in gas_prices])
 
         if all_deals:
             logger.info("Starting Gemini AI analysis of grocery deals...")
@@ -85,17 +83,16 @@ async def run_scrape_and_analyze():
                 ))
 
             # Save scored deals
-            for d in analysis.get('scored_deals', []):
-                db.add(Deal(
-                    run_id=new_run.id,
-                    store_name=d['store_name'],
-                    item_name=d['item_name'],
-                    description=d.get('size', ''),
-                    sale_price=d['sale_price'],
-                    category=d['category'],
-                    score=d['score'],
-                    explanation=d['explanation']
-                ))
+            db.add_all([Deal(
+                run_id=new_run.id,
+                store_name=d['store_name'],
+                item_name=d['item_name'],
+                description=d.get('size', ''),
+                sale_price=d['sale_price'],
+                category=d['category'],
+                score=d['score'],
+                explanation=d['explanation']
+            ) for d in analysis.get('scored_deals', [])])
         else:
             logger.warning("No grocery deals were found to analyze.")
             
