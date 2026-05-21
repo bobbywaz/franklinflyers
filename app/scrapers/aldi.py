@@ -21,7 +21,10 @@ class AldiScraper(BaseScraper):
         url = "https://info.aldi.us/weekly-specials/weekly-ads?zipCode=01301"
         
         try:
-            await page.goto(url, wait_until="networkidle", timeout=60000)
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            except Exception as nav_e:
+                logger.warning(f"Timeout or error navigating to ALDI, trying to continue anyway: {nav_e}")
             
             # Wait for the Flipp/circular widget to load
             # ALDI can be slow to render the flyer content

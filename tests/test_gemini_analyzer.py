@@ -65,7 +65,7 @@ async def test_analyze_deals_normal_mode():
         }
     }
     mock_response.text = json.dumps(mock_response_json)
-    mock_model.generate_content.return_value = mock_response
+    mock_model.generate_content_async = AsyncMock(return_value=mock_response)
 
     deals = [
         {"store_name": "Test Store", "name": "Apples", "price": "1.00", "description": "Fresh"}
@@ -74,7 +74,7 @@ async def test_analyze_deals_normal_mode():
     result = await analyzer.analyze_deals(deals)
 
     # Verify the model was called
-    mock_model.generate_content.assert_called_once()
+    mock_model.generate_content_async.assert_called_once()
 
     # Verify category mapping
     assert len(result["scored_deals"]) == 2
@@ -89,7 +89,7 @@ async def test_analyze_deals_api_error():
 
     # Mock the Gemini GenerativeModel to raise an exception
     mock_model = MagicMock()
-    mock_model.generate_content.side_effect = Exception("API error")
+    mock_model.generate_content_async = AsyncMock(side_effect=Exception("API error"))
     analyzer.model = mock_model
 
     # Mock _mock_analyze to verify fallback
@@ -126,7 +126,7 @@ async def test_analyze_deals_markdown_parsing():
         "best_store": {"score": 10}
     }
     mock_response.text = f"```json\n{json.dumps(json_data)}\n```"
-    mock_model.generate_content.return_value = mock_response
+    mock_model.generate_content_async = AsyncMock(return_value=mock_response)
 
     deals = [{"store_name": "Test Store", "name": "Apples", "price": "1.00", "description": "Fresh"}]
 

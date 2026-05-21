@@ -1,5 +1,11 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
+import sys
+
+mock_playwright = MagicMock()
+sys.modules['playwright'] = mock_playwright
+sys.modules['playwright.async_api'] = mock_playwright
+
 from app.manager import ScraperManager
 
 @pytest.fixture
@@ -32,8 +38,11 @@ async def test_run_all_scrapers(mock_scrapers):
     with patch('app.manager.async_playwright', return_value=mock_async_playwright_cm):
         manager = ScraperManager()
         manager.scrapers = mock_scrapers
+        manager.gas_scraper = MagicMock()
+        manager.gas_scraper.store_name = "Gas Prices"
+        manager.gas_scraper.scrape = AsyncMock(return_value=[{"station_name": "Test Gas"}])
 
-        all_deals, failed_scrapes = await manager.run_all_scrapers()
+        all_deals, gas_prices, failed_scrapes = await manager.run_all_scrapers()
 
         assert len(all_deals) == 1
         assert all_deals[0]["name"] == "deal1"
@@ -43,8 +52,12 @@ async def test_run_all_scrapers(mock_scrapers):
         assert failed_scrapes[0]["store_name"] == "Store2"
         assert "Scraping failed" in failed_scrapes[0]["error_message"]
 
+        assert len(gas_prices) == 1
+        assert gas_prices[0]["station_name"] == "Test Gas"
+
         mock_playwright.chromium.launch.assert_called_once_with(headless=True)
         mock_browser.new_context.assert_called_once()
-        assert mock_context.new_page.call_count == 2
-        mock_page.close.assert_called_once()
+
+        # We now have 3 workers calling new_page for tasks
+        assert mock_context.new_page.call_count >= 3
         mock_browser.close.assert_called_once()

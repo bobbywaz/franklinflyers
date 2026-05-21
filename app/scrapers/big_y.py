@@ -19,7 +19,11 @@ class BigYScraper(BaseScraper):
         url = "https://www.bigy.com/weekly-ad/flyerview"
         
         try:
-            await page.goto(url, wait_until="networkidle", timeout=60000)
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            except Exception as nav_e:
+                logger.warning(f"Timeout or error navigating to Big Y, trying to continue anyway: {nav_e}")
+
             # Big Y takes a while to load the circular
             await page.wait_for_timeout(10000)
             

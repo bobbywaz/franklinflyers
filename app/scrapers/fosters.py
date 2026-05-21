@@ -16,7 +16,12 @@ class FostersScraper(BaseScraper):
     async def scrape(self, page: Page) -> List[Dict]:
         logger.info(f"Navigating to {self.store_name} weekly ad...")
         url = "https://www.fosterssupermarket.com/weekly-ad"
-        await page.goto(url, wait_until="networkidle")
+
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        except Exception as nav_e:
+            logger.warning(f"Timeout or error navigating to Foster's, trying to continue anyway: {nav_e}")
+
         await page.wait_for_timeout(5000)
         
         # Look for the PDF link
