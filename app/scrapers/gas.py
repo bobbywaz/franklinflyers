@@ -5,6 +5,7 @@ import asyncio
 import re
 import requests
 import json
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ class GasScraper:
             {"name": "Turners Falls", "url": "https://www.gasbuddy.com/gasprices/massachusetts/turners-falls"},
             {"name": "Gill", "url": "https://www.gasbuddy.com/gasprices/massachusetts/gill"}
         ]
-        self.flaresolverr_url = "http://172.20.0.1:8191/v1"
+        self.flaresolverr_url = os.getenv("FLARESOLVERR_URL", "http://172.20.0.1:8191/v1")
 
     async def _get_flaresolverr_cookies(self, url: str):
         """

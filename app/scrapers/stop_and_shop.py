@@ -50,7 +50,7 @@ class StopAndShopScraper(BaseScraper):
             return []
 
     async def _get_flaresolverr_cookies(self, url: str):
-        flaresolverr_url = "http://172.20.0.1:8191/v1"
+        flaresolverr_url = os.getenv("FLARESOLVERR_URL", "http://172.20.0.1:8191/v1")
         payload = {
             "cmd": "request.get",
             "url": url,
