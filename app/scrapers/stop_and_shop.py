@@ -4,7 +4,6 @@ import os
 import json
 import asyncio
 import google.generativeai as genai
-import base64
 from .base import BaseScraper
 from typing import List, Dict
 from playwright.async_api import Page
