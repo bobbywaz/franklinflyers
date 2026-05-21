@@ -47,8 +47,10 @@ class BigYScraper(BaseScraper):
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            with open(image_path, "rb") as f:
-                image_data = f.read()
+            def read_image():
+                with open(image_path, "rb") as f:
+                    return f.read()
+            image_data = await asyncio.to_thread(read_image)
             
             image_parts = [
                 {

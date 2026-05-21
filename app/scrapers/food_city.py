@@ -46,8 +46,10 @@ class FoodCityScraper(BaseScraper):
         async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.get(pdf_url)
             if response.status_code == 200:
-                with open(local_pdf_path, "wb") as f:
-                    f.write(response.content)
+                def write_pdf():
+                    with open(local_pdf_path, "wb") as f:
+                        f.write(response.content)
+                await asyncio.to_thread(write_pdf)
                 logger.info(f"Downloaded PDF to {local_pdf_path}")
             else:
                 logger.error(f"Failed to download PDF: {response.status_code}")
