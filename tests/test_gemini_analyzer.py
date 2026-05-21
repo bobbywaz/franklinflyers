@@ -1,6 +1,12 @@
 import pytest
 import json
+import sys
 from unittest.mock import patch, MagicMock, AsyncMock
+
+# Mock missing dependencies
+sys.modules['google.generativeai'] = MagicMock()
+sys.modules['google'] = MagicMock()
+
 from app.gemini_analyzer import GeminiAnalyzer
 
 # Simple test to verify pytest works
@@ -32,7 +38,7 @@ async def test_analyze_deals_normal_mode():
     analyzer.mock_mode = False
 
     # Mock the Gemini GenerativeModel
-    mock_model = MagicMock()
+    mock_model = AsyncMock()
     analyzer.model = mock_model
 
     # Setup the mock response
@@ -65,7 +71,7 @@ async def test_analyze_deals_normal_mode():
         }
     }
     mock_response.text = json.dumps(mock_response_json)
-    mock_model.generate_content.return_value = mock_response
+    mock_model.generate_content_async.return_value = mock_response
 
     deals = [
         {"store_name": "Test Store", "name": "Apples", "price": "1.00", "description": "Fresh"}
@@ -74,7 +80,7 @@ async def test_analyze_deals_normal_mode():
     result = await analyzer.analyze_deals(deals)
 
     # Verify the model was called
-    mock_model.generate_content.assert_called_once()
+    mock_model.generate_content_async.assert_called_once()
 
     # Verify category mapping
     assert len(result["scored_deals"]) == 2
@@ -107,7 +113,7 @@ async def test_analyze_deals_markdown_parsing():
     analyzer.mock_mode = False
 
     # Mock the Gemini GenerativeModel
-    mock_model = MagicMock()
+    mock_model = AsyncMock()
     analyzer.model = mock_model
 
     # Setup the mock response with markdown formatting
@@ -126,7 +132,7 @@ async def test_analyze_deals_markdown_parsing():
         "best_store": {"score": 10}
     }
     mock_response.text = f"```json\n{json.dumps(json_data)}\n```"
-    mock_model.generate_content.return_value = mock_response
+    mock_model.generate_content_async.return_value = mock_response
 
     deals = [{"store_name": "Test Store", "name": "Apples", "price": "1.00", "description": "Fresh"}]
 
@@ -135,3 +141,19 @@ async def test_analyze_deals_markdown_parsing():
     # Verify the markdown was stripped and JSON parsed correctly
     assert result["scored_deals"][0]["item_name"] == "Apples"
     assert result["best_store"]["score"] == 10
+
+@pytest.mark.asyncio
+async def test_generate_recipe_api_error():
+    analyzer = GeminiAnalyzer()
+    analyzer.mock_mode = False
+
+    # Mock the Gemini GenerativeModel to raise an exception
+    mock_model = MagicMock()
+    mock_model.generate_content.side_effect = Exception("API error")
+    analyzer.model = mock_model
+
+    deals = [{"item_name": "Apple", "sale_price": "1.00", "category": "produce"}]
+    result = await analyzer.generate_recipe(deals)
+
+    # Verify it caught the error and returned None
+    assert result is None
