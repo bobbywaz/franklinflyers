@@ -32,11 +32,11 @@ async def test_analyze_deals_normal_mode():
     analyzer.mock_mode = False
 
     # Mock the Gemini GenerativeModel
-    mock_model = MagicMock()
+    mock_model = AsyncMock()
     analyzer.model = mock_model
 
     # Setup the mock response
-    mock_response = MagicMock()
+    mock_response = AsyncMock()
     mock_response_json = {
         "scored_deals": [
             {
@@ -107,11 +107,11 @@ async def test_analyze_deals_markdown_parsing():
     analyzer.mock_mode = False
 
     # Mock the Gemini GenerativeModel
-    mock_model = MagicMock()
+    mock_model = AsyncMock()
     analyzer.model = mock_model
 
     # Setup the mock response with markdown formatting
-    mock_response = MagicMock()
+    mock_response = AsyncMock()
     json_data = {
         "scored_deals": [
             {

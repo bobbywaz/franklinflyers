@@ -54,8 +54,8 @@ async def test_run_scrape_and_analyze_success(mock_session_local, db_session, mo
         {"store_name": "Store B", "error_message": "Timeout"}
     ]
 
-    # Manager returns deals and fails
-    mock_manager.run_all_scrapers.return_value = (mock_deals, mock_failed_scrapes)
+    # Manager returns deals, gas prices, and fails
+    mock_manager.run_all_scrapers.return_value = (mock_deals, [], mock_failed_scrapes)
 
     # Analyzer returns scored deals and best store
     mock_analysis_result = {
@@ -110,7 +110,7 @@ async def test_run_scrape_and_analyze_success(mock_session_local, db_session, mo
 @pytest.mark.asyncio
 async def test_run_scrape_and_analyze_no_deals(mock_session_local, db_session, mock_manager, mock_analyzer):
     # Manager returns empty deals but has a failed scrape
-    mock_manager.run_all_scrapers.return_value = ([], [{"store_name": "Store C", "error_message": "Network error"}])
+    mock_manager.run_all_scrapers.return_value = ([], [], [{"store_name": "Store C", "error_message": "Network error"}])
 
     await run_scrape_and_analyze()
 
