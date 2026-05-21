@@ -30,7 +30,11 @@ class StopAndShopScraper(BaseScraper):
             logger.warning(f"Failed to use FlareSolverr for Stop & Shop: {e}")
 
         try:
-            await page.goto(url, wait_until="load", timeout=60000)
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            except Exception as nav_e:
+                logger.warning(f"Timeout or error navigating to Stop & Shop, trying to continue anyway: {nav_e}")
+
             await page.wait_for_timeout(10000)
             
             content = await page.content()

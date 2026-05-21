@@ -10,19 +10,14 @@ async def test_aldi_scrape(mock_logger):
 
     items = await scraper.scrape(mock_page)
 
-    # Verify logging
-    mock_logger.info.assert_called_once_with("Navigating to ALDI weekly ad...")
+    # Verify logging for new structure
+    # the first call is about navigating to ALDI
+    mock_logger.info.assert_any_call("Navigating to ALDI Greenfield weekly ad...")
 
-    # Verify playwright page interactions
-    mock_page.goto.assert_called_once_with("https://www.aldi.us/weekly-specials/our-weekly-ads/")
-    mock_page.wait_for_timeout.assert_called_once_with(3000)
+    # Verify playwright page interactions (with new wait_until mechanism)
+    mock_page.goto.assert_called_once_with("https://info.aldi.us/weekly-specials/weekly-ads?zipCode=01301", wait_until="domcontentloaded", timeout=60000)
+    mock_page.wait_for_timeout.assert_called_once_with(10000)
+    mock_page.screenshot.assert_called_once_with(path="/tmp/aldi_flyer.png", full_page=False)
 
-    # Verify the current placeholder return value
-    assert len(items) == 2
-    assert items[0]["name"] == "Strawberries"
-    assert items[0]["price"] == "$1.99"
-    assert items[0]["description"] == "1 lb pkg"
-
-    assert items[1]["name"] == "Chicken Breasts"
-    assert items[1]["price"] == "$2.29/lb"
-    assert items[1]["description"] == "Family Pack"
+    # Since GEMINI_API_KEY is missing, it returns empty list
+    assert items == []

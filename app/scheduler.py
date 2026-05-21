@@ -3,6 +3,7 @@ from apscheduler.triggers.cron import CronTrigger
 import os
 import logging
 import json
+import asyncio
 from .manager import ScraperManager
 from .gemini_analyzer import GeminiAnalyzer
 from .database import SessionLocal, init_db
@@ -11,6 +12,45 @@ from .models import Run, Deal, BestStore, FailedScrape, GasPrice
 # Configure logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO) # Default to INFO, but manager/scrapers will log details
+
+async def db_worker(db_queue, db_session, run_id):
+    """Background worker to insert records into the database concurrently."""
+    while True:
+        try:
+            item = await db_queue.get()
+            if item is None:  # Sentinel value to stop
+                break
+
+            item_type = item.get('type')
+            data = item.get('data')
+
+            if item_type == 'gas_price':
+                db_session.add(GasPrice(
+                    run_id=run_id,
+                    station_name=data['station_name'],
+                    address=data['address'],
+                    city=data['city'],
+                    price=data['price'],
+                    fuel_type=data['fuel_type'],
+                    updated_at=data['updated_at'],
+                    source_updated_at=data['source_updated_at']
+                ))
+            elif item_type == 'failed_scrape':
+                db_session.add(FailedScrape(
+                    run_id=run_id,
+                    store_name=data['store_name'],
+                    error_message=data['error_message']
+                ))
+
+            # Commit periodically or per item
+            db_session.commit()
+            db_queue.task_done()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Error in db_worker: {e}")
+            db_session.rollback()
+            db_queue.task_done()
 
 async def run_scrape_and_analyze():
     logger.info("--- STARTING SCHEDULED SCRAPE JOB ---")
@@ -27,33 +67,16 @@ async def run_scrape_and_analyze():
         
         run_date_str = new_run.run_date.strftime('%Y-%m-%d %H:%M')
 
+        db_queue = asyncio.Queue()
+        db_task = asyncio.create_task(db_worker(db_queue, db, new_run.id))
+
         logger.info("Executing scrapers (this may take 1-2 minutes)...")
-        all_deals, gas_prices, failed_scrapes = await manager.run_all_scrapers(run_date=run_date_str)
+        all_deals, gas_prices, failed_scrapes = await manager.run_all_scrapers(run_date=run_date_str, db_queue=db_queue)
         
         logger.info(f"Scrape results: {len(all_deals)} grocery deals, {len(gas_prices)} gas prices.")
         
-        if failed_scrapes:
-            logger.warning(f"{len(failed_scrapes)} scrapers failed: {[f['store_name'] for f in failed_scrapes]}")
-            for fail in failed_scrapes:
-                db.add(FailedScrape(
-                    run_id=new_run.id,
-                    store_name=fail['store_name'],
-                    error_message=fail['error_message']
-                ))
-
-        # Save gas prices
-        logger.info("Saving gas prices to database...")
-        for gp in gas_prices:
-            db.add(GasPrice(
-                run_id=new_run.id,
-                station_name=gp['station_name'],
-                address=gp['address'],
-                city=gp['city'],
-                price=gp['price'],
-                fuel_type=gp['fuel_type'],
-                updated_at=gp['updated_at'],
-                source_updated_at=gp['source_updated_at']
-            ))
+        # Stop DB worker for initial streaming data
+        await db_queue.join()
 
         if all_deals:
             logger.info("Starting Gemini AI analysis of grocery deals...")
@@ -101,6 +124,11 @@ async def run_scrape_and_analyze():
             
         new_run.is_ready = True
         db.commit()
+
+        # Signal the db_worker to exit and wait
+        await db_queue.put(None)
+        await db_task
+
         logger.info(f"--- SCRAPE RUN {new_run.id} FINISHED SUCCESSFULLY ---")
             
     except Exception as e:
