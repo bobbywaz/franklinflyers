@@ -75,11 +75,13 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
             except:
                 pass
         
-        # Top 6 deals overall
-        context["top_overall"] = db.query(Deal).filter(Deal.run_id == latest_run.id).order_by(Deal.score.desc()).limit(6).all()
+        # Get all deals for the latest run
+        deals = db.query(Deal).filter(Deal.run_id == latest_run.id).all()
+
+        # Top 6 deals overall (sorted in Python)
+        context["top_overall"] = sorted(deals, key=lambda d: d.score if d.score is not None else float('-inf'), reverse=True)[:6]
         
         # Deals by category
-        deals = db.query(Deal).filter(Deal.run_id == latest_run.id).all()
         by_cat = {}
         for d in deals:
             if d.category not in by_cat:
