@@ -13,7 +13,6 @@ class Run(Base):
     recipe_idea = Column(Text) # JSON string containing recipe details
     
     deals = relationship("Deal", back_populates="run")
-    gas_prices = relationship("GasPrice", back_populates="run")
     best_store = relationship("BestStore", uselist=False, back_populates="run")
     failed_scrapes = relationship("FailedScrape", back_populates="run")
     published_stores = relationship("PublishedSnapshotStore", back_populates="run")
@@ -44,20 +43,6 @@ class BestStore(Base):
 
     run = relationship("Run", back_populates="best_store")
 
-class GasPrice(Base):
-    __tablename__ = 'gas_prices'
-    id = Column(Integer, primary_key=True)
-    run_id = Column(Integer, ForeignKey('runs.id'))
-    station_name = Column(String)
-    address = Column(String)
-    city = Column(String)
-    price = Column(String)
-    fuel_type = Column(String)
-    updated_at = Column(String)
-    source_updated_at = Column(String)
-    
-    run = relationship("Run", back_populates="gas_prices")
-
 class FailedScrape(Base):
     __tablename__ = 'failed_scrapes'
     id = Column(Integer, primary_key=True)
@@ -87,7 +72,6 @@ class StoreDataset(Base):
     error_message = Column(Text)
 
     deals = relationship("StoreDeal", back_populates="dataset", cascade="all, delete-orphan")
-    gas_prices = relationship("StoreGasPrice", back_populates="dataset", cascade="all, delete-orphan")
     published_entries = relationship("PublishedSnapshotStore", back_populates="dataset")
 
 class StoreDeal(Base):
@@ -99,20 +83,6 @@ class StoreDeal(Base):
     description = Column(String)
 
     dataset = relationship("StoreDataset", back_populates="deals")
-
-class StoreGasPrice(Base):
-    __tablename__ = 'store_gas_prices'
-    id = Column(Integer, primary_key=True)
-    dataset_id = Column(Integer, ForeignKey('store_datasets.id'), nullable=False)
-    station_name = Column(String)
-    address = Column(String)
-    city = Column(String)
-    price = Column(String)
-    fuel_type = Column(String)
-    updated_at = Column(String)
-    source_updated_at = Column(String)
-
-    dataset = relationship("StoreDataset", back_populates="gas_prices")
 
 class PublishedSnapshotStore(Base):
     __tablename__ = 'published_snapshot_stores'

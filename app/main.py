@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import datetime
+import re
 from typing import Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
@@ -19,7 +21,6 @@ from .store_utils import (
     format_date_range,
     get_active_dataset_by_key,
     get_active_grocery_datasets,
-    get_latest_active_gas_dataset,
     get_latest_attempt_by_key,
 )
 
@@ -79,7 +80,6 @@ def _latest_success_by_key(db: Session, scraper_key: str) -> Optional[StoreDatas
 def _build_home_context(request: Request, db: Session):
     latest_run = db.query(Run).filter(Run.is_ready == True).order_by(Run.run_date.desc()).first()
     active_grocery_datasets = get_active_grocery_datasets(db)
-    active_gas_dataset = get_latest_active_gas_dataset(db)
     active_store_names = {dataset.store_name for dataset in active_grocery_datasets}
 
     active_store_badges = [
@@ -120,21 +120,15 @@ def _build_home_context(request: Request, db: Session):
         for deal in published_deals:
             deals_by_category.setdefault(deal.category, []).append(deal)
 
-    gas_by_city = {}
-    if active_gas_dataset:
-        for gas_price in active_gas_dataset.gas_prices:
-            gas_by_city.setdefault(gas_price.city, []).append(gas_price)
-
     return {
         "request": request,
-        "has_data": bool(top_overall or deals_by_category or active_store_badges or gas_by_city),
+        "has_data": bool(top_overall or deals_by_category or active_store_badges),
         "latest_run": latest_run,
         "best_store": best_store,
         "top_overall": top_overall,
         "deals_by_category": deals_by_category,
         "seasonal_guide": seasonal_guide,
         "recipe_idea": recipe_idea,
-        "gas_by_city": gas_by_city,
         "active_store_badges": active_store_badges,
     }
 
@@ -166,11 +160,7 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
 
         latest_attempt = get_latest_attempt_by_key(db, scraper_key)
         latest_success = _latest_success_by_key(db, scraper_key)
-        active_dataset = (
-            get_latest_active_gas_dataset(db)
-            if scraper_key == "gas"
-            else get_active_dataset_by_key(db, scraper_key)
-        )
+        active_dataset = get_active_dataset_by_key(db, scraper_key)
 
         if active_dataset:
             public_status = "Active"
@@ -185,11 +175,9 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
             latest_status = "Never Run"
 
         date_label = ""
-        if active_dataset and active_dataset.kind == "grocery":
+        if active_dataset and active_dataset.kind in ("grocery", "dispensary", "event"):
             date_label = format_date_range(active_dataset.flyer_start_date, active_dataset.flyer_end_date)
-        elif active_dataset and active_dataset.kind == "gas" and active_dataset.expires_at:
-            date_label = f"Fresh until {active_dataset.expires_at.strftime('%Y-%m-%d %H:%M UTC')}"
-        elif latest_success and latest_success.kind == "grocery":
+        elif latest_success and latest_success.kind in ("grocery", "dispensary", "event"):
             date_label = format_date_range(latest_success.flyer_start_date, latest_success.flyer_end_date)
 
         cards.append(
@@ -228,6 +216,217 @@ def _require_admin(request: Request):
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(request=request, name="index.html", context=_build_home_context(request, db))
+
+
+WEED_CATEGORIES = {
+    "Flower": ("flower", "bud", " nug"),
+    "Pre-rolls": ("pre-roll", "preroll", "joint", "dogwalker"),
+    "Edibles": ("gummy", "edible", "chocolate", "tea", "beverage", "chew", "bar", "mint"),
+    "Vapes": ("vape", "cart", "pod", "disposable", "elite"),
+    "Concentrates": ("shatter", "resin", "wax", "crumble", "badder", "shatter", "rosin", "hash", "concentrate")
+}
+
+def categorize_weed(name: str, desc: str) -> str:
+    text = f"{name} {desc}".lower()
+    for cat, keywords in WEED_CATEGORIES.items():
+        if any(kw in text for kw in keywords):
+            return cat
+    return "Flower"
+
+def get_discount_percentage(name: str, desc: str, price_str: str) -> float:
+    import re
+    price_val = None
+    reg_val = None
+    price_match = re.search(r"\$(\d+(?:\.\d+)?)", price_str)
+    if price_match:
+        price_val = float(price_match.group(1))
+    reg_match = re.search(r"sale from \$(\d+(?:\.\d+)?)", desc.lower())
+    if reg_match:
+        reg_val = float(reg_match.group(1))
+    if price_val and reg_val and reg_val > price_val:
+        return (reg_val - price_val) / reg_val
+    return 0.15
+
+
+@app.get("/dispensaries", response_class=HTMLResponse)
+async def read_dispensaries(request: Request, db: Session = Depends(get_db)):
+    from .store_utils import get_active_dispensary_datasets
+    active_datasets = get_active_dispensary_datasets(db)
+    
+    all_deals = []
+    store_deals_map = {}
+    
+    for dataset in active_datasets:
+        store_deals_map[dataset.store_name] = []
+        for deal in dataset.deals:
+            category = categorize_weed(deal.item_name, deal.description or "")
+            discount = get_discount_percentage(deal.item_name, deal.description or "", deal.sale_price)
+            # Map discount range [0.15, 0.35] to score [1, 10]
+            if discount <= 0.15:
+                score = 1
+            elif discount >= 0.35:
+                score = 10
+            else:
+                score = 1 + int(9 * (discount - 0.15) / (0.35 - 0.15))
+            
+            deal_dict = {
+                "id": deal.id,
+                "store_name": dataset.store_name,
+                "item_name": deal.item_name,
+                "sale_price": deal.sale_price,
+                "description": deal.description or "",
+                "category": category,
+                "score": score,
+                "discount": discount
+            }
+            all_deals.append(deal_dict)
+            store_deals_map[dataset.store_name].append(deal_dict)
+            
+    top_overall = sorted(all_deals, key=lambda x: x["discount"], reverse=True)[:6]
+    
+    deals_by_category = {}
+    for deal in all_deals:
+        deals_by_category.setdefault(deal["category"], []).append(deal)
+        
+    best_store = None
+    if store_deals_map:
+        store_stats = []
+        for store_name, deals in store_deals_map.items():
+            if deals:
+                avg_discount = sum(d["discount"] for d in deals) / len(deals)
+                store_stats.append({
+                    "store_name": store_name,
+                    "avg_discount": avg_discount,
+                    "deal_count": len(deals)
+                })
+        if store_stats:
+            best = max(store_stats, key=lambda x: x["avg_discount"])
+            avg_d = best["avg_discount"]
+            if avg_d <= 0.15:
+                best_score = 1
+            elif avg_d >= 0.35:
+                best_score = 10
+            else:
+                best_score = 1 + int(9 * (avg_d - 0.15) / (0.35 - 0.15))
+                
+            best_store = {
+                "store_name": best["store_name"],
+                "score": best_score,
+                "summary": f"{best['store_name']} offers the highest average savings of {int(best['avg_discount'] * 100)}% across {best['deal_count']} deals this week.",
+                "strengths": "High percentage discounts on premium flower and cartridges.",
+                "weaknesses": "Popular strains sell out quickly; online pre-ordering recommended."
+            }
+            
+    DISPENSARY_URLS = {
+        "patriot_care": "https://www.patriotcare.org/shop/store/731/featured",
+        "rise_dispensary": "https://risecannabis.com/dispensaries/massachusetts/greenfield/",
+        "leaf_joy": "https://dutchie.com/stores/leaf-joy",
+        "heirloom_collection": "https://theheirloomcollective.us/shop-bernardston/",
+        "pharmacy_257": "https://shop.253farmacy.com/collection/flower",
+        "smokey_leaf": "https://thesmokeyleaf.com/menu/",
+        "cheech_and_chong": "https://greenfield.dispensoria.com/",
+    }
+    active_store_badges = [
+        {
+            "name": dataset.store_name,
+            "range_label": format_date_range(dataset.flyer_start_date, dataset.flyer_end_date),
+            "scraper_key": dataset.scraper_key,
+            "flyer_url": DISPENSARY_URLS.get(dataset.scraper_key, "#")
+        }
+        for dataset in active_datasets
+    ]
+    
+    context = {
+        "request": request,
+        "has_data": bool(all_deals),
+        "best_store": best_store,
+        "top_overall": top_overall,
+        "deals_by_category": deals_by_category,
+        "active_store_badges": active_store_badges
+    }
+    return templates.TemplateResponse(request=request, name="dispensaries.html", context=context)
+
+
+@app.get("/events", response_class=HTMLResponse)
+async def read_events(request: Request, db: Session = Depends(get_db)):
+    from .store_utils import get_active_event_datasets
+    active_datasets = get_active_event_datasets(db)
+    today = datetime.datetime.utcnow().date()
+
+    def parse_event_date(value):
+        from .store_utils import parse_date_value
+
+        text = re.sub(r"^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+", "", value or "", flags=re.IGNORECASE)
+        text = re.sub(r"(\d+)(?:st|nd|rd|th)", r"\1", text)
+        match = re.search(
+            r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:,\s*\d{4})?",
+            text,
+            flags=re.IGNORECASE,
+        )
+        return parse_date_value(match.group(0), today) if match else None
+    
+    all_events = []
+    store_events_map = {}
+    
+    for dataset in active_datasets:
+        store_events_map[dataset.store_name] = []
+        for deal in dataset.deals:
+            event_label = deal.sale_price
+            description_label = deal.description.split("|", 1)[0].strip() if deal.description else ""
+            if re.search(r"\b(?:am|pm)\b", description_label, re.IGNORECASE):
+                event_label = description_label
+            event_date = parse_event_date(event_label)
+            if event_date and event_date < today:
+                continue
+            detail_url_match = re.search(r"Details:\s*(\S+)", deal.description or "")
+            detail_url = detail_url_match.group(1) if detail_url_match else ""
+            event_description = re.sub(r"\s*\|\s*Details:\s*\S+", "", deal.description or "").strip()
+            event_dict = {
+                "id": deal.id,
+                "store_name": dataset.store_name,
+                "title": deal.item_name,
+                "datetime_label": event_label,
+                "description": event_description,
+                "event_date": event_date,
+                "detail_url": detail_url,
+            }
+            all_events.append(event_dict)
+            store_events_map[dataset.store_name].append(event_dict)
+
+    def event_sort_key(event):
+        parsed_date = event["event_date"]
+        return (parsed_date is None, parsed_date or datetime.date.max, event["title"])
+
+    all_events.sort(key=event_sort_key)
+            
+    EVENT_URLS = {
+        "shea_theater": "https://sheatheater.org",
+        "rendezvous": "https://thevoo.net",
+        "tree_house": "https://treehousebrew.com/events-deerfield",
+        "northampton_live": "https://northampton.live/calendar",
+        "four_phantoms": "https://fourphantoms.com/lander",
+        "greenfield_farmers_market": "https://www.greenfieldfarmersmarket.com/",
+        "franklin_chamber": "https://chamber.franklincc.org/events",
+    }
+    
+    active_store_badges = [
+        {
+            "name": dataset.store_name,
+            "range_label": format_date_range(dataset.flyer_start_date, dataset.flyer_end_date),
+            "scraper_key": dataset.scraper_key,
+            "flyer_url": EVENT_URLS.get(dataset.scraper_key, "#")
+        }
+        for dataset in active_datasets
+    ]
+    
+    context = {
+        "request": request,
+        "has_data": bool(all_events),
+        "all_events": all_events,
+        "store_events_map": store_events_map,
+        "active_store_badges": active_store_badges,
+    }
+    return templates.TemplateResponse(request=request, name="events.html", context=context)
 
 
 @app.get("/admin/login", response_class=HTMLResponse)

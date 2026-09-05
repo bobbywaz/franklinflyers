@@ -14,6 +14,15 @@
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
     <div class="max-w-6xl mx-auto px-4 py-10">
+        <!-- Top Navigation -->
+        <nav class="-mt-10 mb-6 bg-slate-900/60 backdrop-blur-md border-x border-b border-slate-800 rounded-b-xl px-6 py-4 flex justify-center items-center z-50">
+            <div class="flex gap-6">
+                <a href="/" class="text-gray-400 hover:text-white transition-colors font-bold text-sm">Groceries</a>
+                <a href="/dispensaries" class="text-gray-400 hover:text-white transition-colors font-bold text-sm">Dispensaries</a>
+                <a href="/events" class="text-gray-400 hover:text-white transition-colors font-bold text-sm">Events</a>
+            </div>
+        </nav>
+
         <div class="flex items-center justify-between gap-4 mb-8">
             <div>
                 <p class="text-xs uppercase tracking-[0.35em] text-cyan-400 font-bold mb-2">Protected Admin</p>
@@ -41,80 +50,142 @@
         </div>
         {% endif %}
 
-        <section class="mb-10">
-            <div class="flex items-center gap-3 mb-5">
-                <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">▶</div>
-                <div>
-                    <h2 class="text-2xl font-bold text-white">Run Scrapers</h2>
-                    <p class="text-sm text-slate-400">Full run publishes the main homepage snapshot. Individual runs update only that scraper unless they repair missing public data.</p>
+        {% macro render_card(card) %}
+        <article class="rounded-3xl border border-slate-800 bg-slate-900/80 shadow-2xl overflow-hidden">
+            <div class="px-5 py-5 border-b border-slate-800">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <p class="text-xs uppercase tracking-[0.25em] text-slate-500 font-bold mb-2">
+                            {% if card.kind == 'batch' %}Batch{% elif card.kind == 'dispensary' %}Dispensary{% elif card.kind == 'event' %}Event{% else %}Grocery{% endif %}
+                        </p>
+                        <h3 class="text-2xl font-extrabold text-white">{{ card.name }}</h3>
+                    </div>
+                    <form action="{% if card.scraper_key == 'full_run' %}/admin/run/full{% else %}/admin/run/{{ card.scraper_key }}{% endif %}" method="POST">
+                        <button type="submit" class="h-12 w-12 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center text-xl font-bold transition-colors shadow-lg shadow-cyan-500/20" title="Run {{ card.name }}">
+                            ▶
+                        </button>
+                    </form>
                 </div>
             </div>
+            <div class="px-5 py-5 space-y-3">
+                <div class="flex justify-between items-center gap-4">
+                    <span class="text-sm text-slate-400">Public Data</span>
+                    <span class="rounded-full px-3 py-1 text-xs font-bold {% if card.public_status == 'Active' or card.public_status == 'Published' %}bg-emerald-500/20 text-emerald-300{% elif card.public_status == 'Expired Hidden' %}bg-amber-500/20 text-amber-300{% else %}bg-slate-800 text-slate-300{% endif %}">
+                        {{ card.public_status }}
+                    </span>
+                </div>
+                <div class="flex justify-between items-center gap-4">
+                    <span class="text-sm text-slate-400">Latest Attempt</span>
+                    <span class="rounded-full px-3 py-1 text-xs font-bold {% if card.latest_status == 'Success' or card.latest_status == 'Ready' %}bg-cyan-500/20 text-cyan-300{% elif card.latest_status == 'Failed' %}bg-rose-500/20 text-rose-300{% else %}bg-slate-800 text-slate-300{% endif %}">
+                        {{ card.latest_status }}
+                    </span>
+                </div>
+                <div class="flex justify-between items-center gap-4">
+                    <span class="text-sm text-slate-400">{% if card.kind == 'event' %}Events Scraped{% else %}Items Scraped{% endif %}</span>
+                    <span class="text-sm font-semibold text-slate-200">{{ card.items_scraped_count }}</span>
+                </div>
+                {% if card.kind != 'event' %}
+                <div class="flex justify-between items-center gap-4">
+                    <span class="text-sm text-slate-400">Deals</span>
+                    <span class="text-sm font-semibold text-slate-200">{{ card.deal_count }}</span>
+                </div>
+                {% endif %}
+                {% if card.date_label %}
+                <div class="flex justify-between items-center gap-4">
+                    <span class="text-sm text-slate-400">Validity</span>
+                    <span class="text-sm font-semibold text-slate-200">{{ card.date_label }}</span>
+                </div>
+                {% endif %}
+                {% if card.latest_run_at %}
+                <div class="flex justify-between items-center gap-4">
+                    <span class="text-sm text-slate-400">Last Run</span>
+                    <span class="text-sm font-semibold text-slate-200">{{ card.latest_run_at.strftime('%Y-%m-%d %H:%M') }} UTC</span>
+                </div>
+                {% endif %}
+                {% if card.next_refresh_at %}
+                <div class="flex justify-between items-center gap-4">
+                    <span class="text-sm text-slate-400">Next Refresh</span>
+                    <span class="text-sm font-semibold text-slate-200">{{ card.next_refresh_at.strftime('%Y-%m-%d %H:%M') }} UTC</span>
+                </div>
+                {% endif %}
+                {% if card.last_error %}
+                <div class="rounded-2xl border border-rose-900/80 bg-rose-950/50 px-4 py-3">
+                    <p class="text-xs uppercase tracking-[0.2em] text-rose-300 font-bold mb-1">Last Error</p>
+                    <p class="text-sm text-rose-100">{{ card.last_error }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </article>
+        {% endmacro %}
 
+        <!-- System Control -->
+        <section class="mb-10">
+            <div class="flex items-center gap-3 mb-5 border-b border-slate-800 pb-3">
+                <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">⚙️</div>
+                <div>
+                    <h2 class="text-xl font-extrabold text-white">System Actions</h2>
+                    <p class="text-xs text-slate-400">Run a combined full scrape and republish the public homepage analysis snapshot.</p>
+                </div>
+            </div>
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {% for card in cards %}
-                <article class="rounded-3xl border border-slate-800 bg-slate-900/80 shadow-2xl overflow-hidden">
-                    <div class="px-5 py-5 border-b border-slate-800">
-                        <div class="flex items-start justify-between gap-4">
-                            <div>
-                                <p class="text-xs uppercase tracking-[0.25em] text-slate-500 font-bold mb-2">
-                                    {% if card.kind == 'batch' %}Batch{% elif card.kind == 'gas' %}Gas{% else %}Grocery{% endif %}
-                                </p>
-                                <h3 class="text-2xl font-extrabold text-white">{{ card.name }}</h3>
-                            </div>
-                            <form action="{% if card.scraper_key == 'full_run' %}/admin/run/full{% else %}/admin/run/{{ card.scraper_key }}{% endif %}" method="POST">
-                                <button type="submit" class="h-12 w-12 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center text-xl font-bold transition-colors shadow-lg shadow-cyan-500/20" title="Run {{ card.name }}">
-                                    ▶
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                    <div class="px-5 py-5 space-y-3">
-                        <div class="flex justify-between items-center gap-4">
-                            <span class="text-sm text-slate-400">Public Data</span>
-                            <span class="rounded-full px-3 py-1 text-xs font-bold {% if card.public_status == 'Active' or card.public_status == 'Published' %}bg-emerald-500/20 text-emerald-300{% elif card.public_status == 'Expired Hidden' %}bg-amber-500/20 text-amber-300{% else %}bg-slate-800 text-slate-300{% endif %}">
-                                {{ card.public_status }}
-                            </span>
-                        </div>
-                        <div class="flex justify-between items-center gap-4">
-                            <span class="text-sm text-slate-400">Latest Attempt</span>
-                            <span class="rounded-full px-3 py-1 text-xs font-bold {% if card.latest_status == 'Success' or card.latest_status == 'Ready' %}bg-cyan-500/20 text-cyan-300{% elif card.latest_status == 'Failed' %}bg-rose-500/20 text-rose-300{% else %}bg-slate-800 text-slate-300{% endif %}">
-                                {{ card.latest_status }}
-                            </span>
-                        </div>
-                        <div class="flex justify-between items-center gap-4">
-                            <span class="text-sm text-slate-400">Items Scraped</span>
-                            <span class="text-sm font-semibold text-slate-200">{{ card.items_scraped_count }}</span>
-                        </div>
-                        <div class="flex justify-between items-center gap-4">
-                            <span class="text-sm text-slate-400">Deals</span>
-                            <span class="text-sm font-semibold text-slate-200">{{ card.deal_count }}</span>
-                        </div>
-                        {% if card.date_label %}
-                        <div class="flex justify-between items-center gap-4">
-                            <span class="text-sm text-slate-400">Validity</span>
-                            <span class="text-sm font-semibold text-slate-200">{{ card.date_label }}</span>
-                        </div>
-                        {% endif %}
-                        {% if card.latest_run_at %}
-                        <div class="flex justify-between items-center gap-4">
-                            <span class="text-sm text-slate-400">Last Run</span>
-                            <span class="text-sm font-semibold text-slate-200">{{ card.latest_run_at.strftime('%Y-%m-%d %H:%M') }} UTC</span>
-                        </div>
-                        {% endif %}
-                        {% if card.next_refresh_at %}
-                        <div class="flex justify-between items-center gap-4">
-                            <span class="text-sm text-slate-400">Next Refresh</span>
-                            <span class="text-sm font-semibold text-slate-200">{{ card.next_refresh_at.strftime('%Y-%m-%d %H:%M') }} UTC</span>
-                        </div>
-                        {% endif %}
-                        {% if card.last_error %}
-                        <div class="rounded-2xl border border-rose-900/80 bg-rose-950/50 px-4 py-3">
-                            <p class="text-xs uppercase tracking-[0.2em] text-rose-300 font-bold mb-1">Last Error</p>
-                            <p class="text-sm text-rose-100">{{ card.last_error }}</p>
-                        </div>
-                        {% endif %}
-                    </div>
-                </article>
+                    {% if card.kind == 'batch' %}
+                        {{ render_card(card) }}
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Grocery Scrapers -->
+        <section class="mb-10">
+            <div class="flex items-center gap-3 mb-5 border-b border-slate-800 pb-3">
+                <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">🛒</div>
+                <div>
+                    <h2 class="text-xl font-extrabold text-white">Grocery Scrapers</h2>
+                    <p class="text-xs text-slate-400">Manage scrapers for weekly supermarket flyer advertisements.</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {% for card in cards %}
+                    {% if card.kind == 'grocery' %}
+                        {{ render_card(card) }}
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Dispensary Scrapers -->
+        <section class="mb-10">
+            <div class="flex items-center gap-3 mb-5 border-b border-slate-800 pb-3">
+                <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">🌿</div>
+                <div>
+                    <h2 class="text-xl font-extrabold text-white">Dispensary Scrapers</h2>
+                    <p class="text-xs text-slate-400">Manage scrapers for local dispensary menu discounts.</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {% for card in cards %}
+                    {% if card.kind == 'dispensary' %}
+                        {{ render_card(card) }}
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Event Scrapers -->
+        <section class="mb-10">
+            <div class="flex items-center gap-3 mb-5 border-b border-slate-800 pb-3">
+                <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">📅</div>
+                <div>
+                    <h2 class="text-xl font-extrabold text-white">Event Scrapers</h2>
+                    <p class="text-xs text-slate-400">Manage scrapers for local venue event calendars and schedules.</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {% for card in cards %}
+                    {% if card.kind == 'event' %}
+                        {{ render_card(card) }}
+                    {% endif %}
                 {% endfor %}
             </div>
         </section>

@@ -7,8 +7,21 @@ from .scrapers.aldi import AldiScraper
 from .scrapers.big_y import BigYScraper
 from .scrapers.food_city import FoodCityScraper
 from .scrapers.fosters import FostersScraper
-from .scrapers.gas import GasScraper
 from .scrapers.stop_and_shop import StopAndShopScraper
+from .scrapers.patriot_care import PatriotCareScraper
+from .scrapers.rise_dispensary import RiseDispensaryScraper
+from .scrapers.leaf_joy import LeafJoyScraper
+from .scrapers.heirloom_collection import HeirloomCollectionScraper
+from .scrapers.pharmacy_257 import Pharmacy257Scraper
+from .scrapers.smokey_leaf import SmokeyLeafScraper
+from .scrapers.cheech_and_chong import CheechAndChongScraper
+from .scrapers.shea_theater import SheaTheaterScraper
+from .scrapers.rendezvous import RendezvousScraper
+from .scrapers.tree_house import TreeHouseScraper
+from .scrapers.northampton_live import NorthamptonLiveScraper
+from .scrapers.four_phantoms import FourPhantomsScraper
+from .scrapers.greenfield_farmers_market import GreenfieldFarmersMarketScraper
+from .scrapers.franklin_chamber import FranklinChamberScraper
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +35,36 @@ class ScraperManager:
             StopAndShopScraper(),
             FostersScraper(),
         ]
-        gas_scraper = GasScraper()
+        dispensary_scrapers = [
+            PatriotCareScraper(),
+            RiseDispensaryScraper(),
+            LeafJoyScraper(),
+            HeirloomCollectionScraper(),
+            Pharmacy257Scraper(),
+            SmokeyLeafScraper(),
+            CheechAndChongScraper(),
+        ]
+        event_scrapers = [
+            SheaTheaterScraper(),
+            RendezvousScraper(),
+            TreeHouseScraper(),
+            NorthamptonLiveScraper(),
+            FourPhantomsScraper(),
+            GreenfieldFarmersMarketScraper(),
+            FranklinChamberScraper(),
+        ]
 
         self.registry = {scraper.scraper_key: scraper for scraper in grocery_scrapers}
-        self.registry[gas_scraper.scraper_key] = gas_scraper
-        self.scraper_order = [scraper.scraper_key for scraper in grocery_scrapers] + [gas_scraper.scraper_key]
+        for scraper in dispensary_scrapers:
+            self.registry[scraper.scraper_key] = scraper
+        for scraper in event_scrapers:
+            self.registry[scraper.scraper_key] = scraper
+            
+        self.scraper_order = (
+            [scraper.scraper_key for scraper in grocery_scrapers] 
+            + [scraper.scraper_key for scraper in dispensary_scrapers]
+            + [scraper.scraper_key for scraper in event_scrapers]
+        )
 
     def list_scrapers(self) -> List[Dict]:
         cards = [
@@ -42,7 +80,7 @@ class ScraperManager:
                 {
                     "scraper_key": scraper_key,
                     "store_name": scraper.store_name,
-                    "kind": "gas" if scraper_key == "gas" else "grocery",
+                    "kind": scraper.kind,
                 }
             )
         return cards

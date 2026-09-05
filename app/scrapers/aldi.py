@@ -2,6 +2,8 @@ import logging
 import os
 import json
 import asyncio
+import datetime
+import re
 from google import genai
 from google.genai import types
 from .base import BaseScraper
@@ -27,10 +29,15 @@ class AldiScraper(BaseScraper):
             await page.wait_for_timeout(4000)
 
             await self._dismiss_cookie_banner(page)
+            if "aldi.us/store/" in getattr(page, "url", ""):
+                analysis = await self._extract_storefront_deals(page)
+                if analysis:
+                    return self.build_result(analysis)
             await self._load_greenfield_flyer(page)
 
             screenshot_path = "/tmp/aldi_flyer.png"
-            await page.frame_locator('iframe[title="Main Panel"]').locator("canvas").first.screenshot(path=screenshot_path)
+            flyer_canvas = page.frame_locator('iframe[title="Main Panel"]').locator("canvas").first
+            await flyer_canvas.screenshot(path=screenshot_path)
             logger.info(f"Captured ALDI flyer screenshot to {screenshot_path}")
 
             analysis = await self._analyze_screenshot_with_gemini(screenshot_path)
@@ -41,6 +48,62 @@ class AldiScraper(BaseScraper):
         except Exception as e:
             logger.error(f"Error scraping ALDI: {e}")
             return None
+
+    async def _extract_storefront_deals(self, page: Page) -> Optional[Dict]:
+        price_labels = page.locator("span.screen-reader-only", has_text="Current price:")
+        await price_labels.first.wait_for(state="visible", timeout=30000)
+        deals = []
+
+        for index in range(await price_labels.count()):
+            label = price_labels.nth(index)
+            card_text = await label.evaluate(
+                "element => element.closest('a')?.innerText || ''"
+            )
+            lines = [line.strip() for line in card_text.splitlines() if line.strip()]
+            if not lines:
+                continue
+
+            price_match = re.search(r"Current price:\s*(.+)", lines[0])
+            price = price_match.group(1).strip() if price_match else ""
+            name = next(
+                (
+                    line
+                    for line in lines[1:]
+                    if not line.startswith(("$", "Original Price:", "Current price:"))
+                    and not line.endswith("% off")
+                    and line not in {"Many in stock", "Add"}
+                ),
+                "",
+            )
+            if not name or not price:
+                continue
+
+            details = [
+                line
+                for line in lines[1:]
+                if line != name
+                and line not in {"Many in stock", "Add"}
+                and not line.startswith(("$", "Original Price:", "Current price:"))
+                and not line.endswith("% off")
+            ]
+            deals.append(
+                {
+                    "name": name,
+                    "price": price,
+                    "description": ", ".join(details),
+                }
+            )
+
+        if not deals:
+            return None
+
+        start_date = datetime.date.today()
+        return {
+            "items_scraped": await price_labels.count(),
+            "flyer_start_date": start_date.isoformat(),
+            "flyer_end_date": (start_date + datetime.timedelta(days=6)).isoformat(),
+            "deals": deals[:20],
+        }
 
     async def _dismiss_cookie_banner(self, page: Page) -> None:
         try:
@@ -63,7 +126,8 @@ class AldiScraper(BaseScraper):
         await info_frame.get_by_role("button", name="Select").first.click()
 
         await main_frame.locator("text=Selected").first.wait_for(timeout=20000)
-        await page.wait_for_timeout(3000)
+        flyer_canvas = main_frame.locator("canvas").first
+        await flyer_canvas.wait_for(state="visible", timeout=30000)
 
     async def _analyze_screenshot_with_gemini(self, image_path: str) -> Optional[Dict]:
         api_key = os.getenv("GEMINI_API_KEY")
@@ -83,9 +147,12 @@ class AldiScraper(BaseScraper):
                 types.Part.from_bytes(data=image_data, mime_type="image/png")
             ]
             
-            prompt = """
+            current_date_str = datetime.date.today().strftime("%A, %B %d, %Y")
+            prompt = f"""
             Extract the top 15-20 grocery deals from this ALDI flyer screenshot and identify the flyer validity dates.
             Also verify if it mentions 'Greenfield' or '01376'.
+
+            Current date is {current_date_str}. Use this to determine the correct year for the flyer dates if the year is not explicitly mentioned (e.g. if the current date is in July 2026 and the flyer says 'July 8-14' or 'starts Wednesday, July 8', the year is 2026).
 
             Return ONLY a JSON object with:
             - items_scraped: the total number of distinct priced items you read across the flyer before choosing the best deals

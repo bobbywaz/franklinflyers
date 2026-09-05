@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dispensaries - Franklin Flyers</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .border-patriot_care { border-color: #10b981; } /* Emerald */
+        .border-rise_dispensary { border-color: #f97316; } /* Orange */
+        .border-leaf_joy { border-color: #84cc16; } /* Lime Green */
+        .border-heirloom_collection { border-color: #d97706; } /* Amber */
+        .border-pharmacy_257 { border-color: #0891b2; } /* Cyan */
+        .border-smokey_leaf { border-color: #ef4444; } /* Red */
+        .border-cheech_and_chong { border-color: #9333ea; } /* Purple */
+
+        /* Custom backgrounds for Tailwind CDN safety */
+        .bg-patriot { background-color: #10b981 !important; }
+        .bg-rise { background-color: #f97316 !important; }
+        .bg-leafjoy { background-color: #84cc16 !important; }
+        .bg-heirloom { background-color: #b45309 !important; }
+        .bg-pharmacy { background-color: #0891b2 !important; }
+        .bg-smokey { background-color: #ef4444 !important; }
+        .bg-cheech { background-color: #9333ea !important; }
+    </style>
+</head>
+<body class="bg-gray-900 font-sans p-8 min-h-screen relative overflow-x-hidden text-gray-800">
+    <!-- Animated Gradient Background -->
+    <div class="fixed inset-0 -z-10 overflow-hidden">
+        <div class="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-emerald-900 opacity-20 rounded-full blur-3xl"></div>
+        <div class="absolute top-[20%] -right-[10%] w-[50%] h-[50%] bg-green-950 opacity-10 rounded-full blur-3xl"></div>
+        <div class="absolute -bottom-[10%] left-[20%] w-[60%] h-[40%] bg-teal-900 opacity-20 rounded-full blur-3xl"></div>
+    </div>
+
+    {% set store_colors = {
+        'Patriot Care': 'bg-patriot',
+        'Rise': 'bg-rise',
+        'Leaf Joy': 'bg-leafjoy',
+        'Heirloom Collection': 'bg-heirloom',
+        '257 Pharmacy': 'bg-pharmacy',
+        'Smokey Leaf': 'bg-smokey',
+        'Cheech and Chong': 'bg-cheech'
+    } %}
+    {% set store_flyers = {
+        'Patriot Care': 'https://www.patriotcare.org/shop/store/731/featured',
+        'Rise': 'https://risecannabis.com/dispensaries/massachusetts/greenfield/',
+        'Leaf Joy': 'https://dutchie.com/stores/leaf-joy',
+        'Heirloom Collection': 'https://theheirloomcollective.us/shop-bernardston/',
+        '257 Pharmacy': 'https://shop.253farmacy.com/collection/flower',
+        'Smokey Leaf': 'https://thesmokeyleaf.com/menu/',
+        'Cheech and Chong': 'https://greenfield.dispensoria.com/'
+    } %}
+    <div class="max-w-6xl mx-auto relative z-10">
+        <!-- Top Navigation -->
+        <nav class="-mt-8 mb-6 bg-slate-900/60 backdrop-blur-md border-x border-b border-slate-800 rounded-b-xl px-6 py-4 flex justify-center items-center z-50">
+            <div class="flex gap-6">
+                <a href="/" class="text-gray-400 hover:text-white transition-colors font-bold text-sm">Groceries</a>
+                <a href="/dispensaries" class="text-white hover:text-green-500 transition-colors font-bold text-sm border-b-2 border-green-500 pb-1">Dispensaries</a>
+                <a href="/events" class="text-gray-400 hover:text-white transition-colors font-bold text-sm">Events</a>
+            </div>
+        </nav>
+
+        <header class="flex justify-between items-center mb-4 pb-0">
+            <div class="flex flex-col items-start">
+                <img src="/static/images/logo.png" alt="Franklin Flyers Logo" class="h-48 w-auto object-contain brightness-110">
+            </div>
+            <div class="text-right flex flex-col items-end max-w-2xl">
+                {% if active_store_badges %}
+                <p class="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-1">Active Dispensary Menus</p>
+                <div class="flex flex-wrap justify-end gap-2 mb-3">
+                    {% for badge in active_store_badges %}
+                    <a href="{{ badge.flyer_url }}" target="_blank" class="{{ store_colors.get(badge.name, 'bg-slate-700') }} text-white rounded-full px-3 py-1 text-[10px] font-bold shadow-md hover:brightness-110 transition-all">
+                        {{ badge.name }}{% if badge.range_label %} {{ badge.range_label }}{% endif %}
+                    </a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <p class="text-sm text-green-400 font-bold uppercase tracking-widest mb-1">Local Cannabis Deals</p>
+                <p class="text-xs text-gray-400 mb-0 italic leading-relaxed">
+                    Analyzing real-time dispensary menus in Greenfield. We parse pricing structures and product categories to find genuine savings on local cannabis.
+                </p>
+            </div>
+        </header>
+
+
+        {% if not has_data %}
+        <div class="bg-slate-900/50 backdrop-blur-md border border-slate-800 p-12 rounded-xl shadow-2xl text-center">
+            <p class="text-xl text-slate-400 font-light mb-6">No dispensary menu data scraped yet.</p>
+            <p class="text-sm text-slate-500 italic">Log into Admin and run the dispensary scrapers to populate this page.</p>
+        </div>
+        {% else %}
+        
+        
+        {% if top_overall %}
+        <section class="mb-10">
+            <h2 class="text-2xl font-bold mb-4 text-white">🔥 Top 6 Dispensary Deals</h2>
+            <div class="border-t-8 border-green-500 rounded-t-lg"></div>
+            <div class="bg-white rounded-b-lg shadow p-6 mt-0">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {% for deal in top_overall %}
+                    <div class="bg-gray-50 rounded border p-4 relative overflow-hidden text-gray-800">
+                        <a href="{{ store_flyers.get(deal.store_name, '#') }}" target="_blank" class="absolute top-0 right-0 {{ store_colors.get(deal.store_name, 'bg-green-500') }} text-white text-xs px-2 py-1 hover:brightness-110 transition-all z-20">{{ deal.store_name }}</a>
+                        <span class="text-xs text-gray-400 uppercase font-bold">{{ deal.category }}</span>
+                        <h3 class="font-bold text-lg mt-1">{{ deal.item_name }}</h3>
+                        <p class="text-xs text-gray-500 mb-2">{{ deal.description }}</p>
+                        <p class="text-2xl text-green-600 font-extrabold">{{ deal.sale_price }}</p>
+                        <p class="text-xs text-gray-400 mt-2 text-right">Estimated Score: {{ deal.score }}/10</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        {% if deals_by_category %}
+        <section class="mb-10">
+            <h2 class="text-2xl font-bold mb-4 text-white">🌿 Top Deals by Category</h2>
+            <div class="border-t-8 border-green-500 rounded-t-lg"></div>
+            <div class="bg-white rounded-b-lg shadow p-6 grid grid-cols-1 md:grid-cols-2 gap-8 mt-0">
+                {% for category, deals in deals_by_category.items() %}
+                <div>
+                    <h3 class="text-xl font-bold border-b pb-2 mb-4">{{ category|capitalize }}</h3>
+                    <ul class="space-y-3">
+                        {% for deal in deals %}
+                        <li class="bg-gray-50 p-4 rounded relative overflow-hidden pt-7 text-gray-800">
+                            <a href="{{ store_flyers.get(deal.store_name, '#') }}" target="_blank" class="absolute top-0 right-0 {{ store_colors.get(deal.store_name, 'bg-slate-500') }} text-white text-xs px-2 py-0.5 opacity-90 font-medium hover:opacity-100 hover:brightness-110 transition-all z-20">{{ deal.store_name }}</a>
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="font-semibold leading-tight text-lg">{{ deal.item_name }}</p>
+                                    <p class="text-sm text-gray-500 italic mt-1">{{ deal.description }}</p>
+                                </div>
+                                <div class="text-right flex-shrink-0 ml-2">
+                                    <span class="text-green-600 font-bold text-lg block">{{ deal.sale_price }}</span>
+                                    <span class="text-[10px] text-slate-400 block mt-1">Score: {{ deal.score }}/10</span>
+                                </div>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if best_store %}
+        <section class="mb-10">
+            <h2 class="text-2xl font-bold mb-4 text-white">🏆 Best Store This Week</h2>
+            <div class="border-t-8 border-green-500 rounded-t-lg"></div>
+            <div class="bg-white rounded-b-lg shadow p-6 flex flex-col md:flex-row gap-6 items-center mt-0 text-gray-800">
+                <div class="flex-shrink-0 w-24 h-24 rounded-full bg-green-100 flex items-center justify-center border-4 border-green-500 text-3xl font-extrabold text-green-600">
+                    {{ best_store.score }}/10
+                </div>
+                <div>
+                    <h3 class="text-2xl font-bold mb-1">{{ best_store.store_name }}</h3>
+                    <p class="text-gray-600 italic mb-4">"{{ best_store.summary }}"</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <span class="text-xs uppercase tracking-wider font-bold text-green-700 block mb-1">👍 Key Strengths</span>
+                            <p class="text-sm text-gray-700 whitespace-pre-line">{{ best_store.strengths }}</p>
+                        </div>
+                        <div>
+                            <span class="text-xs uppercase tracking-wider font-bold text-red-700 block mb-1">⚠️ Key Weaknesses</span>
+                            <p class="text-sm text-gray-700 whitespace-pre-line">{{ best_store.weaknesses }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        {% endif %}
+    </div>
+</body>
+</html>

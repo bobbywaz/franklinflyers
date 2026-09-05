@@ -107,6 +107,7 @@ async def test_aldi_scrape_selects_zip_in_iframe_before_screenshot(mock_logger):
     info_frame.greenfield_result.wait_for.assert_awaited_once_with(timeout=15000)
     info_frame.select_button.click.assert_awaited_once_with()
     main_frame.selected_marker.wait_for.assert_awaited_once_with(timeout=20000)
+    main_frame.canvas_locator.wait_for.assert_awaited_once_with(state="visible", timeout=30000)
     main_frame.canvas_locator.screenshot.assert_awaited_once_with(path="/tmp/aldi_flyer.png")
     scraper._analyze_screenshot_with_gemini.assert_awaited_once_with("/tmp/aldi_flyer.png")
     mock_logger.error.assert_not_called()

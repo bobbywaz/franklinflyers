@@ -1,5 +1,6 @@
 import datetime
 import logging
+import os
 import re
 from typing import Dict, List, Optional, Tuple
 from playwright.async_api import Page
@@ -18,7 +19,7 @@ class BigYScraper(BaseScraper):
     target_zip_code: str = "01376"
     store_locator_url: str = "https://www.bigy.com/store-locator"
     weekly_ad_url: str = "https://www.bigy.com/weeklyad/flyerview"
-    flaresolverr_url: str = "http://172.20.0.1:8191/v1"
+    flaresolverr_url: str = os.getenv("FLARESOLVERR_URL", "http://172.20.0.1:8191/v1")
     tenant_id: str = "10008"
 
     async def scrape(self, page: Page) -> Optional[Dict]:
@@ -26,23 +27,30 @@ class BigYScraper(BaseScraper):
 
         scrape_page = page
         owned_page: Optional[Page] = None
+        owned_context = None
         try:
+            cookies, user_agent = await self._get_flaresolverr_cookies(self.store_locator_url)
+
             browser = getattr(page.context, "browser", None)
             if browser is not None:
-                owned_page = await browser.new_page()
+                context_args = {}
+                if user_agent:
+                    context_args["user_agent"] = user_agent
+                owned_context = await browser.new_context(**context_args)
+                if cookies:
+                    await owned_context.add_cookies(cookies)
+                owned_page = await owned_context.new_page()
                 scrape_page = owned_page
+            else:
+                if cookies:
+                    await scrape_page.context.add_cookies(cookies)
+                if user_agent:
+                    await scrape_page.set_extra_http_headers({"User-Agent": user_agent})
 
             await scrape_page.set_viewport_size({"width": 1600, "height": 2200})
-            cookies, user_agent = await self._get_flaresolverr_cookies(self.store_locator_url)
-            if cookies:
-                await scrape_page.context.add_cookies(cookies)
-            if user_agent:
-                await scrape_page.set_extra_http_headers({"User-Agent": user_agent})
 
-            updated_cookies = await self._select_greenfield_store(cookies, user_agent)
-            if not updated_cookies:
+            if not await self._select_greenfield_store_in_browser(scrape_page):
                 return None
-            await scrape_page.context.add_cookies(updated_cookies)
             if not await self._prime_greenfield_browser_context(scrape_page):
                 return None
 
@@ -90,6 +98,8 @@ class BigYScraper(BaseScraper):
         finally:
             if owned_page is not None:
                 await owned_page.close()
+            if owned_context is not None:
+                await owned_context.close()
 
     async def _get_flaresolverr_cookies(self, url: str) -> Tuple[Optional[List[Dict]], Optional[str]]:
         logger.info("Requesting cookies from FlareSolverr for Big Y...")
@@ -110,50 +120,76 @@ class BigYScraper(BaseScraper):
             logger.warning("FlareSolverr request failed for Big Y: %s", e)
         return None, None
 
-    async def _select_greenfield_store(self, cookies: Optional[List[Dict]], user_agent: Optional[str]) -> Optional[List[Dict]]:
-        logger.info("Selecting Big Y store context with ZIP %s before scraping...", self.target_zip_code)
-
+    async def _select_greenfield_store_in_browser(self, page: Page) -> bool:
+        logger.info("Selecting Big Y store context with ZIP %s in-browser...", self.target_zip_code)
         try:
-            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-                client.headers.update({"Content-Type": "application/json", "x-tenant-id": self.tenant_id})
-                if user_agent:
-                    client.headers["User-Agent"] = user_agent
-                if cookies:
-                    for c in cookies:
-                        client.cookies.set(c["name"], c["value"], domain=c.get("domain", ".bigy.com"))
+            # We must be on the bigy.com domain to perform fetches and have cookies automatically managed
+            if getattr(page, "url", "about:blank") == "about:blank":
+                await page.goto(self.store_locator_url, wait_until="domcontentloaded", timeout=60000)
 
-                # 1. Resolve store
-                resp = await client.post("https://www.bigy.com/api/store/search", json={"keyword": self.target_zip_code, "latitude": "", "longitude": ""})
-                resp.raise_for_status()
-                stores = resp.json()
-                greenfield_store = next((s for s in stores if "Greenfield" in (s.get("Name") or "")), stores[0] if stores else None)
+            result = await page.evaluate("""async ({zipCode, tenantId}) => {
+                try {
+                    // 1. Resolve store
+                    const searchResp = await fetch("https://www.bigy.com/api/store/search", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "x-tenant-id": tenantId
+                        },
+                        body: JSON.stringify({keyword: zipCode, latitude: "", longitude: ""})
+                    });
+                    if (!searchResp.ok) {
+                        throw new Error(`Search failed: ${searchResp.status} ${searchResp.statusText}`);
+                    }
+                    const stores = await searchResp.json();
+                    const greenfieldStore = stores.find(s => (s.Name || "").includes("Greenfield")) || stores[0];
+                    if (!greenfieldStore) {
+                        throw new Error("No stores returned from search");
+                    }
 
-                if not greenfield_store:
-                    logger.error("Big Y Greenfield search result did not appear for ZIP %s", self.target_zip_code)
-                    return None
+                    // 2. Activate store
+                    const updateResp = await fetch("https://www.bigy.com/api/store/update-guest-store", {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "x-tenant-id": tenantId
+                        },
+                        body: JSON.stringify({
+                            StoreID: greenfieldStore.StoreId,
+                            StoreZipCode: greenfieldStore.ZipCode,
+                            StoreCode: greenfieldStore.StoreCode,
+                            ShopPath: "groceries"
+                        })
+                    });
+                    if (!updateResp.ok) {
+                        throw new Error(`Update guest store failed: ${updateResp.status} ${updateResp.statusText}`);
+                    }
+                    return { success: true, storeName: greenfieldStore.Name };
+                } catch (e) {
+                    return { success: false, error: e.message };
+                }
+            }""", {"zipCode": self.target_zip_code, "tenantId": self.tenant_id})
 
-                # 2. Activate store
-                payload = {"StoreID": greenfield_store.get("StoreId"), "StoreZipCode": greenfield_store.get("ZipCode"), "StoreCode": greenfield_store.get("StoreCode"), "ShopPath": "groceries"}
-                resp = await client.put("https://www.bigy.com/api/store/update-guest-store", json=payload)
-                resp.raise_for_status()
-
-                # 3. Convert cookies back for Playwright
-                pw_cookies = []
-                for name, value in client.cookies.items():
-                    pw_cookies.append({"name": name, "value": value, "domain": ".bigy.com", "path": "/"})
-                return pw_cookies
-
+            if result.get("success"):
+                logger.info("Successfully selected Big Y store context in-browser: %s", result.get("storeName"))
+                return True
+            else:
+                logger.error("In-browser store selection failed: %s", result.get("error"))
+                return False
         except Exception as e:
-            logger.error("Failed to select Big Y store context for ZIP %s: %s", self.target_zip_code, e)
-            return None
+            logger.error("Failed to select Big Y store context in-browser for ZIP %s: %s", self.target_zip_code, e)
+            return False
 
     async def _prime_greenfield_browser_context(self, page: Page) -> bool:
         try:
             await page.goto(self.store_locator_url, wait_until="domcontentloaded", timeout=60000)
             await page.wait_for_timeout(8000)
             shop_here = page.get_by_role("button", name="Shop Here").first
-            await shop_here.click()
-            await page.wait_for_timeout(4000)
+            try:
+                await shop_here.click(timeout=10000)
+                await page.wait_for_timeout(4000)
+            except Exception:
+                logger.info("Big Y store locator did not show Shop Here; continuing with the guest-store context")
             return True
         except Exception as e:
             logger.error("Big Y browser store priming failed after guest-store update: %s", e)

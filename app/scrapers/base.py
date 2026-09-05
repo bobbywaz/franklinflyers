@@ -16,4 +16,6 @@ class BaseScraper(ABC):
         pass
 
     def build_result(self, payload) -> Dict:
-        return build_grocery_result(self.scraper_key, self.store_name, payload)
+        res = build_grocery_result(self.scraper_key, self.store_name, payload)
+        res["kind"] = self.kind
+        return res

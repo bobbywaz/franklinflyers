@@ -40,9 +40,11 @@ class DummyContext:
 
 
 class FakeBigYPage:
-    def __init__(self, overlay_labels=None):
+    def __init__(self, overlay_labels=None, selection_result=None):
         self.events = []
         self.context = DummyContext()
+        self.url = "about:blank"
+        self.selection_result = selection_result or {"success": True, "storeName": "Greenfield"}
         self.set_viewport_size = AsyncMock()
         self._shop_here = DummyLocator()
         self._main_frame = DummyFrame(
@@ -58,6 +60,9 @@ class FakeBigYPage:
 
     async def set_extra_http_headers(self, headers):
         self.events.append(("headers", headers.get("User-Agent")))
+
+    async def evaluate(self, _script, _args):
+        return self.selection_result
 
     def get_by_role(self, role, name):
         if role == "button" and name == "Shop Here":
@@ -84,9 +89,6 @@ async def test_big_y_scrape_extracts_items_from_flipp_overlay_text(mock_logger):
     scraper._get_flaresolverr_cookies = AsyncMock(
         return_value=([{"name": "cf_clearance", "value": "x", "domain": "www.bigy.com", "path": "/"}], "UnitTest-UA")
     )
-    scraper._select_greenfield_store = lambda cookies, user_agent: [
-        {"name": "user-session", "value": "y", "domain": "www.bigy.com", "path": "/"}
-    ]
 
     result = await scraper.scrape(page)
 
@@ -100,7 +102,7 @@ async def test_big_y_scrape_extracts_items_from_flipp_overlay_text(mock_logger):
     assert result["deals"][0]["price"] == "$2.49"
     assert result["deals"][1]["description"] == "MIX OR MATCH"
 
-    assert page.context.add_cookies.await_count == 2
+    assert page.context.add_cookies.await_count == 1
     page.set_viewport_size.assert_awaited_once_with({"width": 1600, "height": 2200})
     page._shop_here.click.assert_awaited_once()
     assert ("headers", "UnitTest-UA") in page.events
@@ -113,12 +115,11 @@ async def test_big_y_scrape_extracts_items_from_flipp_overlay_text(mock_logger):
 @patch("app.scrapers.big_y.logger")
 async def test_big_y_scrape_returns_empty_when_store_selection_fails(mock_logger):
     scraper = BigYScraper()
-    page = FakeBigYPage()
+    page = FakeBigYPage(selection_result={"success": False, "error": "store lookup failed"})
     scraper._get_flaresolverr_cookies = AsyncMock(return_value=(None, None))
-    scraper._select_greenfield_store = lambda cookies, user_agent: None
 
     result = await scraper.scrape(page)
 
     assert result is None
     assert ("goto", scraper.weekly_ad_url) not in page.events
-    mock_logger.error.assert_not_called()
+    mock_logger.error.assert_called()

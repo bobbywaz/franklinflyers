@@ -5,7 +5,6 @@ import os
 from typing import Dict, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
 from .database import SessionLocal
@@ -19,18 +18,14 @@ from .models import (
     Run,
     StoreDataset,
     StoreDeal,
-    StoreGasPrice,
 )
 from .store_utils import (
-    GAS_KIND,
     GROCERY_KIND,
     STATUS_FAILED,
     STATUS_SUCCESS,
-    compute_gas_schedule,
     compute_grocery_schedule,
     get_active_dataset_by_key,
     get_active_grocery_datasets,
-    get_latest_active_gas_dataset,
     guess_flyer_dates,
     utcnow,
 )
@@ -125,18 +120,10 @@ def start_scheduler():
     bootstrap_store_data()
 
     scheduler = AsyncIOScheduler()
-    cron_expr = os.getenv("SCRAPE_SCHEDULE", "0 2 * * 1,4")
-    scheduler.add_job(
-        run_full_scrape,
-        CronTrigger.from_crontab(cron_expr),
-        kwargs={"trigger_mode": "scheduled_full"},
-        id="scheduled_full_run",
-        replace_existing=True,
-    )
     scheduler.start()
     _scheduler = scheduler
     _sync_dynamic_refresh_jobs()
-    logger.info("Scheduler started with cron: %s", cron_expr)
+    logger.info("Scheduler started with flyer-expiration refresh jobs")
     return scheduler
 
 
@@ -197,7 +184,7 @@ def _persist_scrape_result(db, result: Dict, trigger_mode: str) -> StoreDataset:
         dataset.item_count = payload.get("item_count", 0)
         dataset.items_scraped_count = payload.get("items_scraped_count", dataset.item_count)
 
-        if dataset.kind == GROCERY_KIND:
+        if dataset.kind in (GROCERY_KIND, "dispensary", "event"):
             for deal in payload.get("deals", []):
                 db.add(
                     StoreDeal(
@@ -205,20 +192,6 @@ def _persist_scrape_result(db, result: Dict, trigger_mode: str) -> StoreDataset:
                         item_name=deal.get("name", ""),
                         sale_price=deal.get("price", ""),
                         description=deal.get("description", ""),
-                    )
-                )
-        else:
-            for price in payload.get("prices", []):
-                db.add(
-                    StoreGasPrice(
-                        dataset_id=dataset.id,
-                        station_name=price.get("station_name", ""),
-                        address=price.get("address", ""),
-                        city=price.get("city", ""),
-                        price=price.get("price", ""),
-                        fuel_type=price.get("fuel_type", ""),
-                        updated_at=price.get("updated_at", ""),
-                        source_updated_at=price.get("source_updated_at", ""),
                     )
                 )
     elif previous_active and previous_active.expires_at and previous_active.expires_at > now:
@@ -347,8 +320,6 @@ def _sync_dynamic_refresh_jobs():
 
             job_id = f"refresh_{scraper_key}"
             dataset = get_active_dataset_by_key(db, scraper_key)
-            if dataset is None and scraper_key == "gas":
-                dataset = get_latest_active_gas_dataset(db)
 
             if dataset and dataset.next_refresh_at:
                 _scheduler.add_job(
@@ -403,38 +374,6 @@ def _backfill_from_legacy_run(db, latest_run: Run):
                     item_name=deal.item_name,
                     sale_price=deal.sale_price,
                     description=deal.description,
-                )
-            )
-
-    if latest_run.gas_prices:
-        expires_at, next_refresh_at = compute_gas_schedule(latest_run.run_date)
-        gas_dataset = StoreDataset(
-            scraper_key="gas",
-            store_name="Gas Prices",
-            kind=GAS_KIND,
-            trigger_mode="backfill",
-            status=STATUS_SUCCESS,
-            started_at=latest_run.run_date,
-            finished_at=latest_run.run_date,
-            expires_at=expires_at,
-            next_refresh_at=next_refresh_at,
-            item_count=len(latest_run.gas_prices),
-            items_scraped_count=len(latest_run.gas_prices),
-            date_source="backfill",
-        )
-        db.add(gas_dataset)
-        db.flush()
-        for price in latest_run.gas_prices:
-            db.add(
-                StoreGasPrice(
-                    dataset_id=gas_dataset.id,
-                    station_name=price.station_name,
-                    address=price.address,
-                    city=price.city,
-                    price=price.price,
-                    fuel_type=price.fuel_type,
-                    updated_at=price.updated_at,
-                    source_updated_at=price.source_updated_at,
                 )
             )
 

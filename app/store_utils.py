@@ -27,7 +27,6 @@ DATE_PATTERNS = (
 )
 
 GROCERY_KIND = "grocery"
-GAS_KIND = "gas"
 STATUS_SUCCESS = "success"
 STATUS_FAILED = "failed"
 
@@ -52,13 +51,6 @@ def compute_grocery_schedule(flyer_end_date: datetime.date, now: Optional[dateti
     next_refresh_at = expires_at - datetime.timedelta(days=1)
     if next_refresh_at <= now:
         next_refresh_at = now + datetime.timedelta(minutes=5)
-    return expires_at, next_refresh_at
-
-
-def compute_gas_schedule(now: Optional[datetime.datetime] = None) -> Tuple[datetime.datetime, datetime.datetime]:
-    now = now or utcnow()
-    expires_at = now + datetime.timedelta(hours=24)
-    next_refresh_at = now + datetime.timedelta(hours=23)
     return expires_at, next_refresh_at
 
 
@@ -222,20 +214,6 @@ def build_grocery_result(scraper_key: str, store_name: str, result, scraped_at: 
     return normalized
 
 
-def build_gas_result(scraper_key: str, store_name: str, prices: List[Dict], scraped_at: Optional[datetime.datetime] = None) -> Dict:
-    scraped_at = scraped_at or utcnow()
-    expires_at, next_refresh_at = compute_gas_schedule(scraped_at)
-    return {
-        "scraper_key": scraper_key,
-        "store_name": store_name,
-        "kind": GAS_KIND,
-        "scraped_at": scraped_at,
-        "prices": prices,
-        "items_scraped_count": len(prices),
-        "expires_at": expires_at,
-        "next_refresh_at": next_refresh_at,
-    }
-
 
 def active_dataset_subquery(db, kind: str, now: Optional[datetime.datetime] = None):
     now = now or utcnow()
@@ -264,6 +242,35 @@ def get_active_grocery_datasets(db, now: Optional[datetime.datetime] = None) -> 
             (StoreDataset.scraper_key == subquery.c.scraper_key)
             & (StoreDataset.finished_at == subquery.c.finished_at),
         )
+            .order_by(StoreDataset.store_name.asc())
+        .all()
+    )
+
+
+def get_active_dispensary_datasets(db, now: Optional[datetime.datetime] = None) -> List[StoreDataset]:
+    subquery = active_dataset_subquery(db, "dispensary", now)
+    return (
+        db.query(StoreDataset)
+        .join(
+            subquery,
+            (StoreDataset.scraper_key == subquery.c.scraper_key)
+            & (StoreDataset.finished_at == subquery.c.finished_at),
+        )
+        .order_by(StoreDataset.store_name.asc())
+        .all()
+    )
+
+
+def get_active_event_datasets(db, now: Optional[datetime.datetime] = None) -> List[StoreDataset]:
+    subquery = active_dataset_subquery(db, "event", now)
+    return (
+        db.query(StoreDataset)
+        .join(
+            subquery,
+            (StoreDataset.scraper_key == subquery.c.scraper_key)
+            & (StoreDataset.finished_at == subquery.c.finished_at),
+        )
+        .filter(StoreDataset.scraper_key != "hawks_and_reed")
         .order_by(StoreDataset.store_name.asc())
         .all()
     )
@@ -292,20 +299,6 @@ def get_latest_attempt_by_key(db, scraper_key: str) -> Optional[StoreDataset]:
         .first()
     )
 
-
-def get_latest_active_gas_dataset(db, now: Optional[datetime.datetime] = None) -> Optional[StoreDataset]:
-    now = now or utcnow()
-    return (
-        db.query(StoreDataset)
-        .filter(
-            StoreDataset.scraper_key == "gas",
-            StoreDataset.status == STATUS_SUCCESS,
-            StoreDataset.expires_at != None,
-            StoreDataset.expires_at >= now,
-        )
-        .order_by(StoreDataset.finished_at.desc())
-        .first()
-    )
 
 
 def snapshot_active_scraper_keys(db, run: Optional[Run], now: Optional[datetime.datetime] = None) -> Tuple[Run, set]:
