@@ -14,7 +14,7 @@ Scraping weekly flyers across Greenfield and Turners Falls. Our AI analyzes loca
 ## Setup Instructions
 
 ### PREFACE
-At any given t
+At any given time, the app scrapes and presents data from multiple local sources (grocery flyers, pharmacy deals, events, movies, and dispensaries). All scrapers run on an automated schedule but can also be triggered manually from the admin panel.
 
 1. **Configure Environment:**
    Copy the example environment file and insert your API key.

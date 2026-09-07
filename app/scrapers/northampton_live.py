@@ -6,27 +6,44 @@ import logging
 import re
 from urllib.parse import urljoin
 from ..store_utils import utcnow
+from ..store_utils import parse_date_value
 
 logger = logging.getLogger(__name__)
 
 
 class NorthamptonLiveScraper(BaseScraper):
+    """Scraper for Northampton Live community and live music calendar.
+
+    Extracts upcoming performances and concerts in the Pioneer Valley from
+    https://northampton.live/calendar, following individual event links to obtain
+    detailed start times, venues, and descriptions with fallback resilience.
+    """
     store_name: str = "Northampton Live"
     scraper_key: str = "northampton_live"
     kind: str = "event"
     calendar_url: str = "https://northampton.live/calendar"
 
     async def scrape(self, page: Page) -> Optional[Dict]:
+        """Scrape upcoming events and details from Northampton Live.
+
+        Args:
+            page: Playwright Page instance used for browser interaction.
+
+        Returns:
+            Normalized dictionary containing event deals, flyer dates, and next refresh timestamps.
+        """
         logger.info("Scraping Northampton Live calendar...")
         try:
             await page.goto(self.calendar_url, wait_until="domcontentloaded", timeout=30000)
+
             event_links = page.locator("#calendar .event.upcoming a")
             await event_links.first.wait_for(state="visible", timeout=15000)
             detail_page = await page.context.new_page()
 
             events = []
+            event_dates = []
             try:
-                for index in range(min(await event_links.count(), 20)):
+                for index in range(await event_links.count()):
                     link = event_links.nth(index)
                     name = (await link.inner_text()).strip()
                     title = (await link.get_attribute("title") or "").strip()
@@ -43,6 +60,9 @@ class NorthamptonLiveScraper(BaseScraper):
                         urljoin(self.calendar_url, href) if href else None,
                     )
                     event_label = time_label or date_label or "See event details"
+                    parsed_date = self._parse_event_date(event_label or date_label)
+                    if parsed_date:
+                        event_dates.append(parsed_date)
                     detail_parts = [part for part in (location_label, detail_text) if part]
                     if href:
                         detail_parts.append(f"Details: {urljoin(self.calendar_url, href)}")
@@ -64,7 +84,7 @@ class NorthamptonLiveScraper(BaseScraper):
             return self.build_result(
                 {
                     "flyer_start_date": today.isoformat(),
-                    "flyer_end_date": (today + datetime.timedelta(days=14)).isoformat(),
+                    "flyer_end_date": max(event_dates, default=today + datetime.timedelta(days=14)).isoformat(),
                     "deals": events,
                     "items_scraped": await event_links.count(),
                 }
@@ -79,6 +99,17 @@ class NorthamptonLiveScraper(BaseScraper):
             return ""
         match = re.search(r"\((.+)\)$", title)
         return match.group(1) if match else ""
+
+    @staticmethod
+    def _parse_event_date(value: str):
+        text = re.sub(r"^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+", "", value or "", flags=re.IGNORECASE)
+        text = re.sub(r"(\d+)(?:st|nd|rd|th)", r"\1", text)
+        match = re.search(
+            r"(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s+\d{1,2}(?:,\s*\d{4})?",
+            text,
+            flags=re.IGNORECASE,
+        )
+        return parse_date_value(match.group(0), utcnow().date()) if match else None
 
     @staticmethod
     async def _read_event_details(page: Page, url: Optional[str]):

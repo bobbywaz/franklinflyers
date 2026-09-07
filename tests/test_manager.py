@@ -77,3 +77,18 @@ async def test_run_full_batch_returns_success_and_failure_results():
     assert "Scraping failed" in results[1]["error_message"]
     assert mock_context.new_page.call_count == 2
     assert mock_browser.close.called
+
+
+def test_scraper_manager_registers_visit_greenfield():
+    """Verify Visit Greenfield Events scraper is registered in ScraperManager."""
+    manager = ScraperManager()
+    assert "visit_greenfield" in manager.registry
+    assert "visit_greenfield" in manager.scraper_order
+    vg = manager.registry["visit_greenfield"]
+    assert vg.store_name == "Visit Greenfield Events"
+    assert vg.kind == "event"
+
+    cards = manager.list_scrapers()
+    card_keys = [c["scraper_key"] for c in cards]
+    assert "visit_greenfield" in card_keys
+

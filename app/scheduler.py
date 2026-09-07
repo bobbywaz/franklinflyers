@@ -184,7 +184,7 @@ def _persist_scrape_result(db, result: Dict, trigger_mode: str) -> StoreDataset:
         dataset.item_count = payload.get("item_count", 0)
         dataset.items_scraped_count = payload.get("items_scraped_count", dataset.item_count)
 
-        if dataset.kind in (GROCERY_KIND, "dispensary", "event"):
+        if dataset.kind in (GROCERY_KIND, "dispensary", "event", "movie", "pharmacy"):
             for deal in payload.get("deals", []):
                 db.add(
                     StoreDeal(
@@ -311,6 +311,7 @@ def _sync_dynamic_refresh_jobs():
         return
 
     db = SessionLocal()
+    now = utcnow()
     try:
         manager = ScraperManager()
         for card in manager.list_scrapers():
@@ -319,20 +320,27 @@ def _sync_dynamic_refresh_jobs():
                 continue
 
             job_id = f"refresh_{scraper_key}"
-            dataset = get_active_dataset_by_key(db, scraper_key)
+            dataset = get_active_dataset_by_key(db, scraper_key, now)
 
             if dataset and dataset.next_refresh_at:
+                run_date = dataset.next_refresh_at
+                if run_date <= now:
+                    run_date = now + datetime.timedelta(seconds=15)
                 _scheduler.add_job(
                     run_single_scrape,
-                    DateTrigger(run_date=dataset.next_refresh_at),
+                    DateTrigger(run_date=run_date),
                     kwargs={"scraper_key": scraper_key, "trigger_mode": "scheduled_refresh"},
                     id=job_id,
                     replace_existing=True,
                 )
             else:
-                existing = _scheduler.get_job(job_id)
-                if existing:
-                    existing.remove()
+                _scheduler.add_job(
+                    run_single_scrape,
+                    DateTrigger(run_date=now + datetime.timedelta(minutes=1)),
+                    kwargs={"scraper_key": scraper_key, "trigger_mode": "scheduled_retry"},
+                    id=job_id,
+                    replace_existing=True,
+                )
     finally:
         db.close()
 

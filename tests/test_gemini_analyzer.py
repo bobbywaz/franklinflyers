@@ -3,10 +3,6 @@ import json
 from unittest.mock import patch, MagicMock, AsyncMock
 from app.gemini_analyzer import GeminiAnalyzer
 
-# Simple test to verify pytest works
-def test_pytest():
-    assert True
-
 @pytest.mark.asyncio
 async def test_analyze_deals_empty_list():
     analyzer = GeminiAnalyzer()
@@ -31,9 +27,9 @@ async def test_analyze_deals_normal_mode():
     analyzer = GeminiAnalyzer()
     analyzer.mock_mode = False
 
-    # Mock the Gemini GenerativeModel
-    mock_model = MagicMock()
-    analyzer.model = mock_model
+    # Mock the Gemini client
+    mock_client = MagicMock()
+    analyzer.client = mock_client
 
     # Setup the mock response
     mock_response = MagicMock()
@@ -65,7 +61,7 @@ async def test_analyze_deals_normal_mode():
         }
     }
     mock_response.text = json.dumps(mock_response_json)
-    mock_model.generate_content_async = AsyncMock(return_value=mock_response)
+    mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
     deals = [
         {"store_name": "Test Store", "name": "Apples", "price": "1.00", "description": "Fresh"}
@@ -74,7 +70,7 @@ async def test_analyze_deals_normal_mode():
     result = await analyzer.analyze_deals(deals)
 
     # Verify the model was called
-    mock_model.generate_content_async.assert_called_once()
+    mock_client.aio.models.generate_content.assert_called_once()
 
     # Verify category mapping
     assert len(result["scored_deals"]) == 2
@@ -87,14 +83,14 @@ async def test_analyze_deals_api_error():
     analyzer = GeminiAnalyzer()
     analyzer.mock_mode = False
 
-    # Mock the Gemini GenerativeModel to raise an exception
-    mock_model = MagicMock()
-    mock_model.generate_content_async = AsyncMock(side_effect=Exception("API error"))
-    analyzer.model = mock_model
+    # Mock the Gemini client to raise an exception
+    mock_client = MagicMock()
+    mock_client.aio.models.generate_content = AsyncMock(side_effect=Exception("API error"))
+    analyzer.client = mock_client
 
     # Mock _mock_analyze to verify fallback
     with patch.object(analyzer, '_mock_analyze', return_value={"mocked_fallback": True}) as mock_method:
-        deals = [{"store_name": "Test", "name": "Apple", "price": "1.00"}]
+        deals = [{"store_name": "Test Store", "name": "Apple", "price": "1.00"}]
         result = await analyzer.analyze_deals(deals)
 
         # Verify it caught the error and used fallback
@@ -106,9 +102,9 @@ async def test_analyze_deals_markdown_parsing():
     analyzer = GeminiAnalyzer()
     analyzer.mock_mode = False
 
-    # Mock the Gemini GenerativeModel
-    mock_model = MagicMock()
-    analyzer.model = mock_model
+    # Mock the Gemini client
+    mock_client = MagicMock()
+    analyzer.client = mock_client
 
     # Setup the mock response with markdown formatting
     mock_response = MagicMock()
@@ -126,7 +122,7 @@ async def test_analyze_deals_markdown_parsing():
         "best_store": {"score": 10}
     }
     mock_response.text = f"```json\n{json.dumps(json_data)}\n```"
-    mock_model.generate_content_async = AsyncMock(return_value=mock_response)
+    mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
     deals = [{"store_name": "Test Store", "name": "Apples", "price": "1.00", "description": "Fresh"}]
 

@@ -20,8 +20,14 @@ from .scrapers.rendezvous import RendezvousScraper
 from .scrapers.tree_house import TreeHouseScraper
 from .scrapers.northampton_live import NorthamptonLiveScraper
 from .scrapers.four_phantoms import FourPhantomsScraper
-from .scrapers.greenfield_farmers_market import GreenfieldFarmersMarketScraper
 from .scrapers.franklin_chamber import FranklinChamberScraper
+from .scrapers.shelburne_falls import ShelburneFallsScraper
+from .scrapers.visit_greenfield import VisitGreenfieldScraper
+from .scrapers.greenfield_garden_cinemas import GreenfieldGardenCinemasScraper
+from .scrapers.cinemark_hadley import CinemarkHadleyScraper
+from .scrapers.cvs_greenfield import CvsGreenfieldScraper
+from .scrapers.walgreens_greenfield import WalgreensGreenfieldScraper
+from .scrapers.walgreens_turners_falls import WalgreensTurnersFallsScraper
 
 logger = logging.getLogger(__name__)
 
@@ -44,27 +50,44 @@ class ScraperManager:
             SmokeyLeafScraper(),
             CheechAndChongScraper(),
         ]
+        pharmacy_scrapers = [
+            CvsGreenfieldScraper(),
+            WalgreensGreenfieldScraper(),
+            WalgreensTurnersFallsScraper(),
+        ]
         event_scrapers = [
             SheaTheaterScraper(),
             RendezvousScraper(),
             TreeHouseScraper(),
             NorthamptonLiveScraper(),
             FourPhantomsScraper(),
-            GreenfieldFarmersMarketScraper(),
             FranklinChamberScraper(),
+            ShelburneFallsScraper(),
+            VisitGreenfieldScraper(),
+        ]
+        movie_scrapers = [
+            GreenfieldGardenCinemasScraper(),
+            CinemarkHadleyScraper(),
         ]
 
         self.registry = {scraper.scraper_key: scraper for scraper in grocery_scrapers}
         for scraper in dispensary_scrapers:
             self.registry[scraper.scraper_key] = scraper
+        for scraper in pharmacy_scrapers:
+            self.registry[scraper.scraper_key] = scraper
         for scraper in event_scrapers:
+            self.registry[scraper.scraper_key] = scraper
+        for scraper in movie_scrapers:
             self.registry[scraper.scraper_key] = scraper
             
         self.scraper_order = (
             [scraper.scraper_key for scraper in grocery_scrapers] 
             + [scraper.scraper_key for scraper in dispensary_scrapers]
+            + [scraper.scraper_key for scraper in pharmacy_scrapers]
             + [scraper.scraper_key for scraper in event_scrapers]
+            + [scraper.scraper_key for scraper in movie_scrapers]
         )
+
 
     def list_scrapers(self) -> List[Dict]:
         cards = [
@@ -116,18 +139,14 @@ class ScraperManager:
         scraper = self.registry[scraper_key]
         page = await context.new_page()
         try:
-            if scraper_key == "gas":
-                payload = await scraper.scrape(page, run_date=run_date)
-                deal_count = len(payload.get("prices", [])) if payload else 0
-            else:
-                payload = await scraper.scrape(page)
-                deal_count = len(payload.get("deals", [])) if payload else 0
+            payload = await scraper.scrape(page)
+            deal_count = len(payload.get("deals", [])) if payload else 0
 
             if not payload or deal_count == 0:
                 return {
                     "scraper_key": scraper_key,
                     "store_name": scraper.store_name,
-                    "kind": "gas" if scraper_key == "gas" else "grocery",
+                    "kind": getattr(scraper, "kind", "grocery"),
                     "status": "failed",
                     "error_message": "No data returned",
                     "payload": None,
@@ -149,7 +168,7 @@ class ScraperManager:
             return {
                 "scraper_key": scraper_key,
                 "store_name": scraper.store_name,
-                "kind": "gas" if scraper_key == "gas" else "grocery",
+                "kind": getattr(scraper, "kind", "grocery"),
                 "status": "failed",
                 "error_message": str(e),
                 "payload": None,

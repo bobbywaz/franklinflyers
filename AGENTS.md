@@ -9,7 +9,7 @@ Read this before changing the project. Keep this file updated when architecture,
 - App entrypoint: `app/main.py`.
 - Web port: host `8001` to container `8000`.
 - Database: `franklin_flyers.db`.
-- Public pages: `/`, `/dispensaries`, `/events`.
+- Public pages: `/`, `/dispensaries`, `/events`, `/movies`, `/pharmacies`.
 - Admin: `/admin`, protected by session authentication.
 
 ## Architecture
@@ -35,15 +35,21 @@ Current registered keys, in manager order by category:
 
 - Grocery: `aldi`, `big_y`, `food_city`, `stop_and_shop`, `fosters`
 - Dispensary: `patriot_care`, `rise_dispensary`, `leaf_joy`, `heirloom_collection`, `pharmacy_257`, `smokey_leaf`, `cheech_and_chong`
-- Events: `shea_theater`, `rendezvous`, `tree_house`, `northampton_live`, `four_phantoms`, `greenfield_farmers_market`, `franklin_chamber`
+- Pharmacy: `cvs_greenfield`, `walgreens_greenfield`, `walgreens_turners_falls`
+- Events: `shea_theater`, `rendezvous`, `tree_house`, `northampton_live`, `four_phantoms`, `franklin_chamber`, `shelburne_falls`, `visit_greenfield`
+- Movies: `greenfield_garden_cinemas`, `cinemark_hadley`
 
 `full_run` is a synthetic admin card, not a scraper key. Hawks & Reed is retired and must not be re-added; stale `hawks_and_reed` event datasets are excluded from active event results.
 
 Every scraper should return a normalized result through `BaseScraper.build_result()`:
 
 - Grocery: `kind="grocery"`, `deals`, `items_scraped_count`, flyer dates, expiry, next refresh.
+- Dispensary: `kind="dispensary"`, `deals`, `items_scraped_count`, dates, expiry, next refresh.
+- Pharmacy: `kind="pharmacy"`, `deals`, `items_scraped_count`, flyer dates, expiry, next refresh.
 - Events: `kind="event"`, `deals`, and event date/time in the deal data whenever the source provides it.
+- Movies: `kind="movie"`, `deals`, `items_scraped_count`, show dates, expiry, next refresh.
 - A failed or empty result is persisted as a failed attempt by the scheduler.
+
 
 ## Event Rules
 
@@ -55,16 +61,19 @@ Anything added to `/events` must display the source data on this site:
 - Do not use Gemini for ordinary event details.
 - Store source detail URLs in descriptions or structured fields so the UI can render a clean link.
 - Dated events are filtered out after their event date; undated recurring fallback entries remain until their dataset refreshes.
+- Today's activity wheel incorporates upcoming movie showtimes strictly within the next few hours (2.5 hours, deduplicated across theaters, capped at 8 nearest showtimes) interleaved with today's community events.
 - Keep each source link in `read_events()` and its venue badge/card in `templates/events.html`.
 
 Current event sources:
 
-- Shea Theater and The Rendezvous use resilient event fallbacks.
-- Tree House uses the South Deerfield events page: `https://treehousebrew.com/events-deerfield`.
+- Shea Theater extracts upcoming shows from `https://sheatheater.org/calendar` with resilient event fallbacks.
+- The Rendezvous uses structured recurring weekly community event fallbacks pointing to `https://thevoo.net/events/`.
+- Tree House extracts Deerfield campus events from `https://treehousebrew.com/live-music-and-events` with resilient fallback.
 - Northampton Live reads `#calendar .event.upcoming a` and fetches detail pages for time, location, and description.
-- Four Phantoms currently has no stable public calendar feed; its fallback is clearly labeled and points to `https://fourphantoms.com/lander`.
-- Greenfield Farmers Market reads the official Saturday schedule from `https://www.greenfieldfarmersmarket.com/`.
-- Franklin County Chamber reads the rolling calendar at `https://chamber.franklincc.org/events`, then fetches detail pages for descriptions and locations. This source also includes the Greenfield Farmers Market and other regional listings.
+- Four Phantoms uses structured recurring taproom event fallbacks pointing to `https://fourphantoms.com/lander`.
+- Franklin County Chamber reads the monthly calendar at `https://chamber.franklincc.org/events/calendar/` with fallback to rolling event cards. This source also includes the Greenfield Farmers Market and other regional listings.
+- Shelburne Falls paginates event cards and dates from `https://www.shelburnefalls.com/calendar/` across multiple pages without Gemini.
+- Visit Greenfield extracts municipal, community, arts, and library events from `https://visitgreenfieldma.com/events/` via The Events Calendar REST API with Playwright DOM and curated local fallbacks.
 
 ## Grocery Scraper Notes
 
@@ -73,6 +82,19 @@ Current event sources:
 - Food City: downloads the weekly-ad PDF and uses Gemini extraction. The PDF is currently image-only, so local text extraction is not sufficient.
 - Foster's: downloads its weekly-ad PDF and uses Gemini extraction.
 - Stop & Shop: use the Backflipp API path first for Greenfield (`postal_code=01376`, store code `0442`); browser extraction is only fallback because of anti-bot challenges.
+
+## Movie Scraper Notes
+
+- Greenfield Garden Cinemas: uses direct `httpx` GET of `https://www.gardencinemas.net/` with Playwright fallback; parses movies, showtimes, ratings, runtime, poster images, trailer links, and online ticketing URLs.
+- Cinemark Hampshire Mall (Hadley): scrapes `https://www.cinemark.com/theatres/ma-hadley/cinemark-at-hampshire-mall-and-xd` using Playwright with `wait_until="domcontentloaded"` and `wait_for_selector(".showtimeMovieBlock")`. Extracts formats (XD, RealD 3D), showtimes, seatmap ticket URLs, ratings, and posters. Do not use `wait_until="networkidle"` due to long-lived telemetry connections.
+
+## Pharmacy Scraper Notes
+
+- CVS Pharmacy (Greenfield): queries the Backflipp circular items API (`postal_code=01301`, `q="CVS"`) for store #1094 at 137 Federal St. Extracts weekly promotions, ExtraBucks rewards, categories, product images, and circular dates, with resilient curated fallback deals. Note: Turners Falls residents use this location across the river as there is no physical CVS in Turners Falls/Montague.
+- Walgreens (Greenfield): queries the Backflipp circular items API (`postal_code=01301`, `q="Walgreens"`) for store #10672 at 5 Pierce St. Extracts weekly promotions, myWalgreens digital coupon discounts, categories, product images, and circular dates.
+- Walgreens (Turners Falls): queries the Backflipp circular items API (`postal_code=01376`, `q="Walgreens"`) for store #17960 at 240 Avenue A in Turners Falls. Extracts town-specific circular deals, categories, product images, and circular dates.
+- Pharmacy Deal Analysis: `GeminiAnalyzer.analyze_pharmacy_deals` categorizes all circular items into 6 standardized departments (`Vitamins & Supplements`, `Health & Medicine`, `Personal Care & Beauty`, `Household & Paper Goods`, `Snacks & Beverages`, `Baby & Family`), assigns 1–10 value scores and rationale explanations, picks a weekly pharmacy winner, and caches results in `configurations` table (`key="pharmacy_ai_analysis"`).
+
 
 ## Scheduling
 

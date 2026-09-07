@@ -3,7 +3,7 @@ import logging
 import os
 import datetime
 import re
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from .database import SessionLocal, get_db, init_db
+from .gemini_analyzer import GeminiAnalyzer, PHARMACY_CATEGORIES
 from .manager import ScraperManager
 from .models import Configuration, Run, StoreDataset
 from .scheduler import run_full_scrape, run_single_scrape, start_scheduler
@@ -21,8 +22,11 @@ from .store_utils import (
     format_date_range,
     get_active_dataset_by_key,
     get_active_grocery_datasets,
+    get_active_movie_datasets,
+    get_active_pharmacy_datasets,
     get_latest_attempt_by_key,
 )
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -175,9 +179,9 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
             latest_status = "Never Run"
 
         date_label = ""
-        if active_dataset and active_dataset.kind in ("grocery", "dispensary", "event"):
+        if active_dataset and active_dataset.kind in ("grocery", "dispensary", "event", "movie"):
             date_label = format_date_range(active_dataset.flyer_start_date, active_dataset.flyer_end_date)
-        elif latest_success and latest_success.kind in ("grocery", "dispensary", "event"):
+        elif latest_success and latest_success.kind in ("grocery", "dispensary", "event", "movie"):
             date_label = format_date_range(latest_success.flyer_start_date, latest_success.flyer_end_date)
 
         cards.append(
@@ -219,7 +223,7 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
 
 
 WEED_CATEGORIES = {
-    "Flower": ("flower", "bud", " nug"),
+    "Flower": ("flower", "bud", "nug"),
     "Pre-rolls": ("pre-roll", "preroll", "joint", "dogwalker"),
     "Edibles": ("gummy", "edible", "chocolate", "tea", "beverage", "chew", "bar", "mint"),
     "Vapes": ("vape", "cart", "pod", "disposable", "elite"),
@@ -347,11 +351,170 @@ async def read_dispensaries(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(request=request, name="dispensaries.html", context=context)
 
 
+def _get_upcoming_wheel_movies(
+    db: Session,
+    today: Optional[datetime.date] = None,
+    max_hours_ahead: float = 2.5,
+    max_movies: int = 8,
+    now_ref: Optional[datetime.datetime] = None,
+) -> List[Dict]:
+    """Retrieve upcoming movie showtimes within the next few hours for the activity wheel.
+
+    Args:
+        db: Database session for querying active movie datasets.
+        today: Reference date for valid datasets; defaults to Eastern local date.
+        max_hours_ahead: Maximum hours into the future to look for starting showtimes (default 2.5h).
+        max_movies: Maximum number of movie items to include on the wheel (default 8).
+        now_ref: Optional explicit datetime used for testing; defaults to current Eastern time.
+
+    Returns:
+        List of movie activity dictionaries sorted by start time, deduplicated by title,
+        and capped at max_movies.
+    """
+    import zoneinfo
+    try:
+        local_tz = zoneinfo.ZoneInfo("America/New_York")
+    except Exception:
+        local_tz = datetime.timezone.utc
+
+    now_local = now_ref or datetime.datetime.now(local_tz)
+    today = today or now_local.date()
+
+    # Grace period: allow movies starting up to 10 minutes ago (previews/trailers buffer)
+    min_dt = now_local - datetime.timedelta(minutes=10)
+    # Strictly within the next few hours (no end-of-day / midnight expansion)
+    max_dt = now_local + datetime.timedelta(hours=max_hours_ahead)
+
+    from .store_utils import get_active_movie_datasets
+    active_movie_datasets = get_active_movie_datasets(db)
+    movie_items = []
+
+    def parse_showtime_dt(t_str: str) -> Optional[datetime.datetime]:
+        """Parse a 12-hour time string (e.g. '4:30 PM') into a datetime today."""
+        m = re.search(r"(\d{1,2}):(\d{2})\s*([apAP])(?:[mM])?", t_str)
+        if not m:
+            return None
+        h = int(m.group(1))
+        minute = int(m.group(2))
+        mer = m.group(3).upper()
+        if mer == "P" and h < 12:
+            h += 12
+        elif mer == "A" and h == 12:
+            h = 0
+        return now_local.replace(hour=h, minute=minute, second=0, microsecond=0)
+
+    for dataset in active_movie_datasets:
+        # Check dataset validity window
+        if dataset.flyer_start_date and dataset.flyer_end_date:
+            if not (dataset.flyer_start_date <= today <= dataset.flyer_end_date):
+                continue
+
+        for deal in dataset.deals:
+            raw_times = (deal.sale_price or "").split(",")
+            upcoming_times = []
+            for t in raw_times:
+                t_clean = t.strip()
+                if not t_clean or "Check schedule" in t_clean:
+                    continue
+                dt = parse_showtime_dt(t_clean)
+                if dt and min_dt <= dt <= max_dt:
+                    upcoming_times.append((dt, t_clean))
+
+            if not upcoming_times:
+                continue
+
+            upcoming_times.sort(key=lambda x: x[0])
+            next_dt, next_time = upcoming_times[0]
+            other_times = [x[1] for x in upcoming_times[1:]]
+
+            # Extract structured ticketing and details URLs
+            ticket_url_match = re.search(r"Tickets:\s*(\S+)", deal.description or "")
+            ticket_url = ticket_url_match.group(1) if ticket_url_match else ""
+
+            details_url_match = re.search(r"Details:\s*(\S+)", deal.description or "")
+            details_url = details_url_match.group(1) if details_url_match else (
+                "https://www.gardencinemas.net/" if "Garden" in dataset.store_name else "https://www.cinemark.com/"
+            )
+
+            clean_desc = deal.description or ""
+            clean_desc = re.sub(r"\s*\|\s*(?:Poster|Trailer|Tickets|Details):.*", "", clean_desc).strip()
+
+            datetime_label = f"Starts at {next_time}"
+            if other_times:
+                datetime_label += f" • Also at {', '.join(other_times)}"
+
+            movie_items.append({
+                "id": f"movie-{deal.id}",
+                "movie_deal_id": deal.id,
+                "title": f"🎬 {deal.item_name}",
+                "pure_title": deal.item_name,
+                "store_name": dataset.store_name,
+                "datetime_label": datetime_label,
+                "next_time": next_time,
+                "next_dt": next_dt,
+                "description": clean_desc,
+                "detail_url": details_url,
+                "ticket_url": ticket_url,
+                "movies_url": f"/movies#movie-{deal.id}",
+                "is_movie": True,
+            })
+
+    # Sort nearest showtime first
+    movie_items.sort(key=lambda m: m["next_dt"])
+
+    # Deduplicate by normalized movie title so duplicate screenings across venues don't crowd the wheel
+    seen_titles = set()
+    deduped_movies = []
+    for item in movie_items:
+        norm = re.sub(r"[^\w\s]", "", item["pure_title"].lower()).strip()
+        if norm not in seen_titles:
+            seen_titles.add(norm)
+            deduped_movies.append(item)
+
+    if max_movies and max_movies > 0:
+        return deduped_movies[:max_movies]
+    return deduped_movies
+
+
+def _interleave_wheel_items(events: List[Dict], movies: List[Dict]) -> List[Dict]:
+    """Evenly distribute events and movies around the circular wheel canvas.
+
+    Interleaves the two lists proportionally so that neither events nor movies
+    are clumped into contiguous blocks on the wheel.
+    """
+    if not movies:
+        return events
+    if not events:
+        return movies
+    total = len(events) + len(movies)
+    result = []
+    e_idx, m_idx = 0, 0
+    for i in range(total):
+        if m_idx < len(movies) and (e_idx >= len(events) or (m_idx / len(movies)) <= (e_idx / len(events))):
+            result.append(movies[m_idx])
+            m_idx += 1
+        else:
+            result.append(events[e_idx])
+            e_idx += 1
+    return result
+
+
 @app.get("/events", response_class=HTMLResponse)
 async def read_events(request: Request, db: Session = Depends(get_db)):
+    """Render the local events calendar and interactive random activity wheel.
+
+    Queries active event datasets, computes calendar date matrix with recurring
+    events expanded, fetches soonest upcoming movie showtimes within the next 2.5 hours,
+    and renders the events view.
+    """
     from .store_utils import get_active_event_datasets
     active_datasets = get_active_event_datasets(db)
-    today = datetime.datetime.utcnow().date()
+    try:
+        import zoneinfo
+        local_tz = zoneinfo.ZoneInfo("America/New_York")
+        today = datetime.datetime.now(local_tz).date()
+    except Exception:
+        today = datetime.datetime.now(datetime.timezone.utc).date()
 
     def parse_event_date(value):
         from .store_utils import parse_date_value
@@ -359,11 +522,19 @@ async def read_events(request: Request, db: Session = Depends(get_db)):
         text = re.sub(r"^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+", "", value or "", flags=re.IGNORECASE)
         text = re.sub(r"(\d+)(?:st|nd|rd|th)", r"\1", text)
         match = re.search(
-            r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:,\s*\d{4})?",
+            r"(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s+\d{1,2}(?:,\s*\d{4})?",
             text,
             flags=re.IGNORECASE,
         )
-        return parse_date_value(match.group(0), today) if match else None
+        if match:
+            return parse_date_value(match.group(0), today)
+        iso_match = re.search(r"\b\d{4}-\d{2}-\d{2}\b", value or "")
+        if iso_match:
+            try:
+                return datetime.date.fromisoformat(iso_match.group(0))
+            except ValueError:
+                pass
+        return None
     
     all_events = []
     store_events_map = {}
@@ -371,11 +542,15 @@ async def read_events(request: Request, db: Session = Depends(get_db)):
     for dataset in active_datasets:
         store_events_map[dataset.store_name] = []
         for deal in dataset.deals:
-            event_label = deal.sale_price
+            event_label = (deal.sale_price or "").strip()
             description_label = deal.description.split("|", 1)[0].strip() if deal.description else ""
-            if re.search(r"\b(?:am|pm)\b", description_label, re.IGNORECASE):
-                event_label = description_label
             event_date = parse_event_date(event_label)
+            if not event_date and parse_event_date(description_label):
+                event_label = description_label
+                event_date = parse_event_date(event_label)
+            elif not event_date and re.search(r"\b(?:am|pm)\b", description_label, re.IGNORECASE):
+                if not re.search(r"\b(?:am|pm)\b", event_label, re.IGNORECASE):
+                    event_label = f"{event_label} - {description_label}".strip(" -")
             if event_date and event_date < today:
                 continue
             detail_url_match = re.search(r"Details:\s*(\S+)", deal.description or "")
@@ -398,6 +573,39 @@ async def read_events(request: Request, db: Session = Depends(get_db)):
         return (parsed_date is None, parsed_date or datetime.date.max, event["title"])
 
     all_events.sort(key=event_sort_key)
+
+    dated_events = [event for event in all_events if event["event_date"]]
+    undated_events = [event for event in all_events if not event["event_date"]]
+    calendar_first_date = dated_events[0]["event_date"] if dated_events else today
+    calendar_last_date = dated_events[-1]["event_date"] if dated_events else today
+    calendar_start = calendar_first_date - datetime.timedelta(days=(calendar_first_date.weekday() + 1) % 7)
+    calendar_end = calendar_last_date + datetime.timedelta(days=(6 - ((calendar_last_date.weekday() + 1) % 7)))
+    calendar_events = {}
+    for event in dated_events:
+        recurring_match = re.search(
+            r"Every\s+(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)\s+Until\b",
+            event["datetime_label"] or "",
+            flags=re.IGNORECASE,
+        )
+        if recurring_match:
+            weekday = [
+                "monday", "tuesday", "wednesday", "thursday",
+                "friday", "saturday", "sunday"
+            ].index(recurring_match.group(1).lower())
+            occurrence = today + datetime.timedelta(days=(weekday - today.weekday()) % 7)
+            while occurrence <= event["event_date"]:
+                occurrence_event = dict(event)
+                occurrence_event["event_date"] = occurrence
+                calendar_events.setdefault(occurrence.isoformat(), []).append(occurrence_event)
+                occurrence += datetime.timedelta(days=7)
+        else:
+            date_key = event["event_date"].isoformat()
+            calendar_events.setdefault(date_key, []).append(event)
+    calendar_days = (calendar_end - calendar_start).days + 1
+    calendar_weeks = [
+        [calendar_start + datetime.timedelta(days=day_offset) for day_offset in range(week * 7, week * 7 + 7)]
+        for week in range(calendar_days // 7)
+    ]
             
     EVENT_URLS = {
         "shea_theater": "https://sheatheater.org",
@@ -405,8 +613,9 @@ async def read_events(request: Request, db: Session = Depends(get_db)):
         "tree_house": "https://treehousebrew.com/events-deerfield",
         "northampton_live": "https://northampton.live/calendar",
         "four_phantoms": "https://fourphantoms.com/lander",
-        "greenfield_farmers_market": "https://www.greenfieldfarmersmarket.com/",
         "franklin_chamber": "https://chamber.franklincc.org/events",
+        "shelburne_falls": "https://www.shelburnefalls.com/calendar/",
+        "visit_greenfield": "https://visitgreenfieldma.com/events/",
     }
     
     active_store_badges = [
@@ -419,17 +628,357 @@ async def read_events(request: Request, db: Session = Depends(get_db)):
         for dataset in active_datasets
     ]
     
+    today_events = calendar_events.get(today.isoformat(), [])
+    today_event_items = [
+        {
+            "id": ev["id"],
+            "title": ev["title"],
+            "store_name": ev["store_name"],
+            "datetime_label": ev.get("datetime_label", ""),
+            "description": ev.get("description", ""),
+            "detail_url": ev.get("detail_url", ""),
+            "is_movie": False,
+        }
+        for ev in today_events
+    ]
+
+    upcoming_movies = _get_upcoming_wheel_movies(db, today)
+    wheel_items = _interleave_wheel_items(today_event_items, upcoming_movies)
+    wheel_items_json = json.dumps(wheel_items, default=str)
+
     context = {
         "request": request,
         "has_data": bool(all_events),
         "all_events": all_events,
+        "undated_events": undated_events,
         "store_events_map": store_events_map,
         "active_store_badges": active_store_badges,
+        "calendar_first_date": calendar_first_date,
+        "calendar_last_date": calendar_last_date,
+        "calendar_weeks": calendar_weeks,
+        "calendar_events": calendar_events,
+        "today": today,
+        "today_events": today_events,
+        "wheel_items": wheel_items,
+        "wheel_items_json": wheel_items_json,
+        "today_events_json": json.dumps(today_event_items, default=str),
+        "upcoming_movies_count": len(upcoming_movies),
     }
     return templates.TemplateResponse(request=request, name="events.html", context=context)
 
 
+@app.get("/movies", response_class=HTMLResponse)
+async def read_movies(request: Request, db: Session = Depends(get_db)):
+    """Render current movie showtimes, formats, and theater info.
+
+    Displays active film titles and showtimes for Greenfield Garden Cinemas
+    and Cinemark at Hampshire Mall in Hadley, with filtering tabs and direct ticket links.
+    """
+    active_datasets = get_active_movie_datasets(db)
+    try:
+        import zoneinfo
+        local_tz = zoneinfo.ZoneInfo("America/New_York")
+        today = datetime.datetime.now(local_tz).date()
+    except Exception:
+        today = datetime.datetime.now(datetime.timezone.utc).date()
+
+    all_movies = []
+    theaters_map = {}
+
+    THEATER_INFO = {
+        "greenfield_garden_cinemas": {
+            "name": "Greenfield Garden Cinemas",
+            "tagline": "Independent Cinema in Downtown Greenfield",
+            "address": "361 Main St, Greenfield, MA 01301",
+            "phone": "(413) 774-4881",
+            "url": "https://www.gardencinemas.net/",
+            "badge_color": "bg-emerald-600",
+            "badge_border": "border-emerald-500",
+            "accent_text": "text-emerald-400",
+        },
+        "cinemark_hadley": {
+            "name": "Cinemark at Hampshire Mall (Hadley)",
+            "tagline": "XD Screens, Luxury Loungers & Full Amenities",
+            "address": "367 Russell St, Hadley, MA 01035",
+            "phone": "(413) 587-4237",
+            "url": "https://www.cinemark.com/theatres/ma-hadley/cinemark-at-hampshire-mall-and-xd",
+            "badge_color": "bg-red-600",
+            "badge_border": "border-red-500",
+            "accent_text": "text-red-400",
+        },
+    }
+
+    for dataset in active_datasets:
+        theaters_map[dataset.scraper_key] = []
+        info = THEATER_INFO.get(dataset.scraper_key, {
+            "name": dataset.store_name,
+            "tagline": "Local Cinema",
+            "address": "Franklin County / Pioneer Valley",
+            "phone": "",
+            "url": "#",
+            "badge_color": "bg-indigo-600",
+            "badge_border": "border-indigo-500",
+            "accent_text": "text-indigo-400",
+        })
+
+        for deal in dataset.deals:
+            desc = deal.description or ""
+            poster_match = re.search(r"Poster:\s*(\S+)", desc)
+            poster_url = poster_match.group(1) if poster_match else ""
+
+            trailer_match = re.search(r"Trailer:\s*(\S+)", desc)
+            trailer_url = trailer_match.group(1) if trailer_match else ""
+
+            tickets_match = re.search(r"Tickets:\s*(\S+)", desc)
+            tickets_url = tickets_match.group(1) if tickets_match else ""
+
+            details_match = re.search(r"Details:\s*(\S+)", desc)
+            details_url = details_match.group(1) if details_match else info["url"]
+
+            dir_match = re.search(r"Director:\s*([^|]+)", desc)
+            director = dir_match.group(1).strip() if dir_match else ""
+
+            star_match = re.search(r"Starring:\s*([^|]+)", desc)
+            starring = star_match.group(1).strip() if star_match else ""
+
+            first_part = desc.split("|")[0].strip() if desc else ""
+            rating_match = re.search(r"\b(G|PG-13|PG|R|NC-17|NR)\b", first_part)
+            rating = rating_match.group(1) if rating_match else ""
+
+            runtime_match = re.search(r"(\d+\s*hr(?:\s*\d+\s*min)?|\d+\s*min)", first_part, re.I)
+            runtime = runtime_match.group(1) if runtime_match else ""
+
+            formats_match = re.search(r"Formats?:\s*([^|]+)", desc)
+            formats = formats_match.group(1).strip() if formats_match else ""
+
+            times_raw = deal.sale_price or ""
+            showtimes = [t.strip() for t in times_raw.split(",") if t.strip()]
+
+            clean_desc = re.sub(r"\s*\|\s*(?:Poster|Trailer|Tickets|Details):.*", "", desc).strip()
+
+            movie_item = {
+                "id": deal.id,
+                "theater_name": dataset.store_name,
+                "scraper_key": dataset.scraper_key,
+                "title": deal.item_name,
+                "rating": rating,
+                "runtime": runtime,
+                "formats": formats,
+                "showtimes": showtimes,
+                "showtimes_raw": times_raw,
+                "poster_url": poster_url,
+                "trailer_url": trailer_url,
+                "tickets_url": tickets_url or details_url,
+                "details_url": details_url,
+                "director": director,
+                "starring": starring,
+                "description": clean_desc,
+                "theater_info": info,
+            }
+            all_movies.append(movie_item)
+            theaters_map[dataset.scraper_key].append(movie_item)
+
+    # Sort all movies by title
+    all_movies.sort(key=lambda m: m["title"].lower())
+
+    active_theater_badges = [
+        {
+            "scraper_key": ds.scraper_key,
+            "name": ds.store_name,
+            "count": len(theaters_map.get(ds.scraper_key, [])),
+            "url": THEATER_INFO.get(ds.scraper_key, {}).get("url", "#"),
+            "badge_color": THEATER_INFO.get(ds.scraper_key, {}).get("badge_color", "bg-indigo-600"),
+        }
+        for ds in active_datasets
+    ]
+
+    context = {
+        "request": request,
+        "has_data": bool(all_movies),
+        "all_movies": all_movies,
+        "theaters_map": theaters_map,
+        "theater_info": THEATER_INFO,
+        "active_theater_badges": active_theater_badges,
+        "today": today,
+    }
+    return templates.TemplateResponse(request=request, name="movies.html", context=context)
+
+
+async def _get_pharmacy_analysis(db: Session, active_datasets: List[StoreDataset], all_deals: List[Dict]) -> Dict:
+    """Load or compute AI scoring and department categorization for pharmacy deals."""
+    if not all_deals:
+        return {
+            "scored_deals": [],
+            "top_overall": [],
+            "deals_by_category": {c: [] for c in PHARMACY_CATEGORIES},
+            "best_pharmacy": None,
+        }
+
+    sig = ":".join(
+        f"{ds.id}_{ds.finished_at.isoformat() if ds.finished_at else ''}_{len(ds.deals)}"
+        for ds in sorted(active_datasets, key=lambda d: d.id)
+    )
+
+    cached_config = db.query(Configuration).filter(Configuration.key == "pharmacy_ai_analysis").first()
+    if cached_config and cached_config.value:
+        try:
+            payload = json.loads(cached_config.value)
+            if payload.get("sig") == sig and payload.get("analysis"):
+                return payload["analysis"]
+        except Exception as e:
+            logger.warning(f"Failed to parse cached pharmacy analysis: {e}")
+
+    analyzer = GeminiAnalyzer()
+    analysis = await analyzer.analyze_pharmacy_deals(all_deals)
+
+    try:
+        if not cached_config:
+            cached_config = Configuration(key="pharmacy_ai_analysis", value=json.dumps({"sig": sig, "analysis": analysis}))
+            db.add(cached_config)
+        else:
+            cached_config.value = json.dumps({"sig": sig, "analysis": analysis})
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Could not persist pharmacy analysis cache: {e}")
+        db.rollback()
+
+    return analysis
+
+
+@app.get("/pharmacies", response_class=HTMLResponse)
+async def read_pharmacies(request: Request, db: Session = Depends(get_db)):
+    """Render weekly circular promotions for local pharmacies in Greenfield and Turners Falls.
+
+    Displays AI-scored deals, category departments, top picks overall, and store-by-store
+    comparisons for CVS Pharmacy and Walgreens across Greenfield and Turners Falls.
+    """
+    active_datasets = get_active_pharmacy_datasets(db)
+
+    PHARMACY_INFO = {
+        "cvs_greenfield": {
+            "name": "CVS Pharmacy",
+            "town": "Greenfield",
+            "tagline": "24-Hour Pharmacy & Health Hub",
+            "address": "137 Federal St, Greenfield, MA 01301",
+            "phone": "(413) 774-7201",
+            "hours": "Open 24 Hours",
+            "url": "https://www.cvs.com/store-locator/cvs-pharmacy-address/137+FEDERAL+STREET+GREENFIELD+MA+01301-4404/storeid/01094",
+            "circular_url": "https://www.cvs.com/weeklyad",
+            "badge_color": "bg-red-600",
+            "badge_border": "border-red-500",
+            "accent_text": "text-red-400",
+        },
+        "walgreens_greenfield": {
+            "name": "Walgreens",
+            "town": "Greenfield",
+            "tagline": "Full-Service Pharmacy & Essentials",
+            "address": "5 Pierce St, Greenfield, MA 01301",
+            "phone": "(413) 773-3801",
+            "hours": "Mon–Sun 8:00 AM – 10:00 PM",
+            "url": "https://www.walgreens.com/locator/walgreens-5+pierce+st-greenfield-ma-01301/id=10672",
+            "circular_url": "https://www.walgreens.com/offers/offers.jsp",
+            "badge_color": "bg-sky-600",
+            "badge_border": "border-sky-500",
+            "accent_text": "text-sky-400",
+        },
+        "walgreens_turners_falls": {
+            "name": "Walgreens",
+            "town": "Turners Falls",
+            "tagline": "Community Pharmacy & Convenience",
+            "address": "240 Avenue A, Turners Falls, MA 01376",
+            "phone": "(413) 863-3107",
+            "hours": "Mon–Fri 8am–8pm, Sat 9–6, Sun 10–6",
+            "url": "https://www.walgreens.com/locator/walgreens-240+avenue+a-turners+falls-ma-01376/id=17960",
+            "circular_url": "https://www.walgreens.com/offers/offers.jsp",
+            "badge_color": "bg-indigo-600",
+            "badge_border": "border-indigo-500",
+            "accent_text": "text-indigo-400",
+        },
+    }
+
+    raw_deals = []
+    for dataset in active_datasets:
+        info = PHARMACY_INFO.get(dataset.scraper_key, {
+            "name": dataset.store_name,
+            "town": "Franklin County",
+            "tagline": "Local Pharmacy",
+            "address": "",
+            "phone": "",
+            "hours": "",
+            "url": "#",
+            "circular_url": "#",
+            "badge_color": "bg-teal-600",
+            "badge_border": "border-teal-500",
+            "accent_text": "text-teal-400",
+        })
+
+        for deal in dataset.deals:
+            desc = deal.description or ""
+            img_match = re.search(r"Image:\s*(\S+)", desc)
+            image_url = img_match.group(1) if img_match else ""
+            clean_desc = re.sub(r"\s*\|\s*Image:\s*\S+", "", desc).strip()
+
+            deal_item = {
+                "id": deal.id,
+                "store_name": dataset.store_name,
+                "scraper_key": dataset.scraper_key,
+                "town": info["town"],
+                "name": deal.item_name,
+                "price": deal.sale_price,
+                "description": clean_desc,
+                "image_url": image_url,
+                "store_info": info,
+                "flyer_start": str(dataset.flyer_start_date) if dataset.flyer_start_date else "",
+                "flyer_end": str(dataset.flyer_end_date) if dataset.flyer_end_date else "",
+            }
+            raw_deals.append(deal_item)
+
+    analysis = await _get_pharmacy_analysis(db, active_datasets, raw_deals)
+
+    scored_deals = analysis.get("scored_deals", [])
+    top_overall = analysis.get("top_overall", [])
+    deals_by_category = analysis.get("deals_by_category", {})
+    best_pharmacy = analysis.get("best_pharmacy")
+
+    stores_map = {ds.scraper_key: [] for ds in active_datasets}
+    for d in scored_deals:
+        key = d.get("scraper_key")
+        if key in stores_map:
+            stores_map[key].append(d)
+
+    active_store_badges = [
+        {
+            "scraper_key": ds.scraper_key,
+            "name": ds.store_name,
+            "count": len(stores_map.get(ds.scraper_key, [])),
+            "town": PHARMACY_INFO.get(ds.scraper_key, {}).get("town", ""),
+            "url": PHARMACY_INFO.get(ds.scraper_key, {}).get("url", "#"),
+            "circular_url": PHARMACY_INFO.get(ds.scraper_key, {}).get("circular_url", "#"),
+            "badge_color": PHARMACY_INFO.get(ds.scraper_key, {}).get("badge_color", "bg-teal-600"),
+            "flyer_start": ds.flyer_start_date,
+            "flyer_end": ds.flyer_end_date,
+        }
+        for ds in active_datasets
+    ]
+
+    context = {
+        "request": request,
+        "has_data": bool(scored_deals),
+        "top_overall": top_overall,
+        "deals_by_category": deals_by_category,
+        "best_pharmacy": best_pharmacy,
+        "all_deals": scored_deals,
+        "stores_map": stores_map,
+        "pharmacy_info": PHARMACY_INFO,
+        "active_store_badges": active_store_badges,
+        "categories": PHARMACY_CATEGORIES,
+        "total_deals_count": len(scored_deals),
+    }
+    return templates.TemplateResponse(request=request, name="pharmacies.html", context=context)
+
+
 @app.get("/admin/login", response_class=HTMLResponse)
+
 async def admin_login_page(request: Request):
     if _is_admin_authenticated(request):
         return RedirectResponse(url="/admin", status_code=303)

@@ -15,13 +15,16 @@
 <body class="bg-slate-950 text-slate-100 min-h-screen">
     <div class="max-w-6xl mx-auto px-4 py-10">
         <!-- Top Navigation -->
-        <nav class="-mt-10 mb-6 bg-slate-900/60 backdrop-blur-md border-x border-b border-slate-800 rounded-b-xl px-6 py-4 flex justify-center items-center z-50">
-            <div class="flex gap-6">
-                <a href="/" class="text-gray-400 hover:text-white transition-colors font-bold text-sm">Groceries</a>
-                <a href="/dispensaries" class="text-gray-400 hover:text-white transition-colors font-bold text-sm">Dispensaries</a>
-                <a href="/events" class="text-gray-400 hover:text-white transition-colors font-bold text-sm">Events</a>
+        <nav class="-mt-10 mb-6 bg-slate-900/80 backdrop-blur-md border-x border-b border-slate-700 rounded-b-xl px-6 py-5 flex justify-center items-center shadow-lg shadow-black/20 z-50">
+            <div class="flex flex-wrap justify-center gap-2 sm:gap-3">
+                <a href="/" class="text-gray-300 hover:text-white hover:bg-gray-800 transition-colors font-bold text-base px-4 py-2 rounded-lg">Groceries</a>
+                <a href="/dispensaries" class="text-gray-300 hover:text-white hover:bg-gray-800 transition-colors font-bold text-base px-4 py-2 rounded-lg">Dispensaries</a>
+                <a href="/events" class="text-gray-300 hover:text-white hover:bg-gray-800 transition-colors font-bold text-base px-4 py-2 rounded-lg">Events</a>
+                <a href="/movies" class="text-gray-300 hover:text-white hover:bg-gray-800 transition-colors font-bold text-base px-4 py-2 rounded-lg">Movies</a>
+                <a href="/pharmacies" class="text-gray-300 hover:text-white hover:bg-gray-800 transition-colors font-bold text-base px-4 py-2 rounded-lg">Pharmacies</a>
             </div>
         </nav>
+
 
         <div class="flex items-center justify-between gap-4 mb-8">
             <div>
@@ -55,9 +58,10 @@
             <div class="px-5 py-5 border-b border-slate-800">
                 <div class="flex items-start justify-between gap-4">
                     <div>
-                        <p class="text-xs uppercase tracking-[0.25em] text-slate-500 font-bold mb-2">
-                            {% if card.kind == 'batch' %}Batch{% elif card.kind == 'dispensary' %}Dispensary{% elif card.kind == 'event' %}Event{% else %}Grocery{% endif %}
+                        <p class="text-xs font-bold uppercase tracking-[0.2em] text-cyan-400 mb-1">
+                            {% if card.kind == 'batch' %}System Action{% elif card.kind == 'dispensary' %}Dispensary{% elif card.kind == 'pharmacy' %}Pharmacy{% elif card.kind == 'event' %}Event Source{% elif card.kind == 'movie' %}Movie Theater{% else %}Supermarket{% endif %}
                         </p>
+
                         <h3 class="text-2xl font-extrabold text-white">{{ card.name }}</h3>
                     </div>
                     <form action="{% if card.scraper_key == 'full_run' %}/admin/run/full{% else %}/admin/run/{{ card.scraper_key }}{% endif %}" method="POST">
@@ -81,10 +85,10 @@
                     </span>
                 </div>
                 <div class="flex justify-between items-center gap-4">
-                    <span class="text-sm text-slate-400">{% if card.kind == 'event' %}Events Scraped{% else %}Items Scraped{% endif %}</span>
+                    <span class="text-sm text-slate-400">{% if card.kind == 'event' %}Events Aggregated{% elif card.kind == 'movie' %}Movies Listed{% else %}Items Scraped{% endif %}</span>
                     <span class="text-sm font-semibold text-slate-200">{{ card.items_scraped_count }}</span>
                 </div>
-                {% if card.kind != 'event' %}
+                {% if card.kind != 'event' and card.kind != 'movie' %}
                 <div class="flex justify-between items-center gap-4">
                     <span class="text-sm text-slate-400">Deals</span>
                     <span class="text-sm font-semibold text-slate-200">{{ card.deal_count }}</span>
@@ -172,8 +176,27 @@
             </div>
         </section>
 
+        <!-- Pharmacy Scrapers -->
+        <section class="mb-10">
+            <div class="flex items-center gap-3 mb-5 border-b border-slate-800 pb-3">
+                <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">💊</div>
+                <div>
+                    <h2 class="text-xl font-extrabold text-white">Pharmacy Circular Scrapers</h2>
+                    <p class="text-xs text-slate-400">Manage scrapers for weekly CVS and Walgreens promotions and discounts.</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {% for card in cards %}
+                    {% if card.kind == 'pharmacy' %}
+                        {{ render_card(card) }}
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </section>
+
         <!-- Event Scrapers -->
         <section class="mb-10">
+
             <div class="flex items-center gap-3 mb-5 border-b border-slate-800 pb-3">
                 <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">📅</div>
                 <div>
@@ -184,6 +207,24 @@
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {% for card in cards %}
                     {% if card.kind == 'event' %}
+                        {{ render_card(card) }}
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Movie Showtime Scrapers -->
+        <section class="mb-10">
+            <div class="flex items-center gap-3 mb-5 border-b border-slate-800 pb-3">
+                <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">🎬</div>
+                <div>
+                    <h2 class="text-xl font-extrabold text-white">Movie Showtime Scrapers</h2>
+                    <p class="text-xs text-slate-400">Manage scrapers for local cinema showtimes and schedules.</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {% for card in cards %}
+                    {% if card.kind == 'movie' %}
                         {{ render_card(card) }}
                     {% endif %}
                 {% endfor %}

@@ -98,6 +98,7 @@ def parse_date_value(value, reference_date: Optional[datetime.date] = None) -> O
     text = str(value).strip()
     if not text:
         return None
+    text = re.sub(r"\bSept\b", "Sep", text, flags=re.IGNORECASE)
 
     for pattern in DATE_PATTERNS:
         try:
@@ -188,7 +189,29 @@ def normalize_grocery_analysis(result, scraped_at: Optional[datetime.datetime] =
     if items_scraped_count <= 0:
         items_scraped_count = len(deals)
 
-    expires_at, next_refresh_at = compute_grocery_schedule(flyer_end, scraped_at)
+    calc_expires, calc_refresh = compute_grocery_schedule(flyer_end, scraped_at)
+    expires_at = None
+    next_refresh_at = None
+    if isinstance(result, dict):
+        raw_expires = result.get("expires_at")
+        if isinstance(raw_expires, datetime.datetime):
+            expires_at = raw_expires
+        elif isinstance(raw_expires, str):
+            try:
+                expires_at = datetime.datetime.fromisoformat(raw_expires)
+            except ValueError:
+                expires_at = None
+        raw_refresh = result.get("next_refresh_at")
+        if isinstance(raw_refresh, datetime.datetime):
+            next_refresh_at = raw_refresh
+        elif isinstance(raw_refresh, str):
+            try:
+                next_refresh_at = datetime.datetime.fromisoformat(raw_refresh)
+            except ValueError:
+                next_refresh_at = None
+
+    expires_at = expires_at or calc_expires
+    next_refresh_at = next_refresh_at or calc_refresh
     return {
         "deals": deals,
         "items_scraped_count": items_scraped_count,
@@ -270,13 +293,68 @@ def get_active_event_datasets(db, now: Optional[datetime.datetime] = None) -> Li
             (StoreDataset.scraper_key == subquery.c.scraper_key)
             & (StoreDataset.finished_at == subquery.c.finished_at),
         )
-        .filter(StoreDataset.scraper_key != "hawks_and_reed")
+        .filter(
+            StoreDataset.scraper_key.notin_(["hawks_and_reed", "greenfield_farmers_market"])
+        )
+        .order_by(StoreDataset.store_name.asc())
+        .all()
+    )
+
+
+def get_active_movie_datasets(db, now: Optional[datetime.datetime] = None) -> List[StoreDataset]:
+    """Retrieve the latest valid movie datasets for each active cinema.
+
+    Queries store_datasets for kind="movie" whose expiration time is strictly
+    greater than `now` (defaulting to current UTC), ordered alphabetically by store name.
+
+    Args:
+        db: SQLAlchemy database session.
+        now: Optional reference datetime for expiration check (defaults to utcnow()).
+
+    Returns:
+        List of active StoreDataset instances with kind="movie".
+    """
+    subquery = active_dataset_subquery(db, "movie", now)
+    return (
+        db.query(StoreDataset)
+        .join(
+            subquery,
+            (StoreDataset.scraper_key == subquery.c.scraper_key)
+            & (StoreDataset.finished_at == subquery.c.finished_at),
+        )
+        .order_by(StoreDataset.store_name.asc())
+        .all()
+    )
+
+
+def get_active_pharmacy_datasets(db, now: Optional[datetime.datetime] = None) -> List[StoreDataset]:
+    """Retrieve the latest valid pharmacy datasets for each active pharmacy.
+
+    Queries store_datasets for kind="pharmacy" whose expiration time is strictly
+    greater than `now` (defaulting to current UTC), ordered alphabetically by store name.
+
+    Args:
+        db: SQLAlchemy database session.
+        now: Optional reference datetime for expiration check (defaults to utcnow()).
+
+    Returns:
+        List of active StoreDataset instances with kind="pharmacy".
+    """
+    subquery = active_dataset_subquery(db, "pharmacy", now)
+    return (
+        db.query(StoreDataset)
+        .join(
+            subquery,
+            (StoreDataset.scraper_key == subquery.c.scraper_key)
+            & (StoreDataset.finished_at == subquery.c.finished_at),
+        )
         .order_by(StoreDataset.store_name.asc())
         .all()
     )
 
 
 def get_active_dataset_by_key(db, scraper_key: str, now: Optional[datetime.datetime] = None) -> Optional[StoreDataset]:
+
     now = now or utcnow()
     return (
         db.query(StoreDataset)

@@ -36,13 +36,16 @@
     } %}
     <div class="max-w-6xl mx-auto relative z-10">
         <!-- Top Navigation -->
-        <nav class="-mt-8 mb-6 bg-slate-900/60 backdrop-blur-md border-x border-b border-slate-800 rounded-b-xl px-6 py-4 flex justify-center items-center z-50">
-            <div class="flex gap-6">
-                <a href="/" class="text-white hover:text-red-500 transition-colors font-bold text-sm border-b-2 border-red-500 pb-1">Groceries</a>
-                <a href="/dispensaries" class="text-gray-400 hover:text-white transition-colors font-bold text-sm">Dispensaries</a>
-                <a href="/events" class="text-gray-400 hover:text-white transition-colors font-bold text-sm">Events</a>
+        <nav class="-mt-8 mb-6 bg-slate-900/80 backdrop-blur-md border-x border-b border-slate-700 rounded-b-xl px-6 py-5 flex justify-center items-center shadow-lg shadow-black/20 z-50">
+            <div class="flex flex-wrap justify-center gap-2 sm:gap-3">
+                <a href="/" class="text-white transition-colors font-bold text-base px-4 py-2 rounded-lg border shadow-sm">Groceries</a>
+                <a href="/dispensaries" class="text-gray-300 hover:text-white hover:bg-gray-800 transition-colors font-bold text-base px-4 py-2 rounded-lg">Dispensaries</a>
+                <a href="/events" class="text-gray-300 hover:text-white hover:bg-gray-800 transition-colors font-bold text-base px-4 py-2 rounded-lg">Events</a>
+                <a href="/movies" class="text-gray-300 hover:text-white hover:bg-gray-800 transition-colors font-bold text-base px-4 py-2 rounded-lg">Movies</a>
+                <a href="/pharmacies" class="text-gray-300 hover:text-white hover:bg-gray-800 transition-colors font-bold text-base px-4 py-2 rounded-lg">Pharmacies</a>
             </div>
         </nav>
+
 
         <header class="flex justify-between items-center mb-4 pb-0">
             <div class="flex flex-col items-start">
@@ -50,12 +53,23 @@
             </div>
             <div class="text-right flex flex-col items-end max-w-2xl">
                 {% if active_store_badges %}
-                <p class="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-1">Current Store Flyers</p>
-                <div class="flex flex-wrap justify-end gap-2 mb-3">
+                <div class="flex items-center justify-end gap-2 mb-1.5">
+                    <p class="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Current Store Flyers</p>
+                    <span class="text-gray-600 text-[10px]">•</span>
+                    <button type="button" id="select-all-stores" class="text-[10px] text-blue-400 hover:text-blue-300 font-semibold focus:outline-none transition-colors">All</button>
+                    <span class="text-gray-600 text-[10px]">•</span>
+                    <button type="button" id="deselect-all-stores" class="text-[10px] text-gray-400 hover:text-gray-300 font-semibold focus:outline-none transition-colors">None</button>
+                </div>
+                <div class="flex flex-wrap justify-end gap-2 mb-3" id="store-filters">
                     {% for badge in active_store_badges %}
-                    <a href="{{ badge.flyer_url }}" target="_blank" class="{{ store_colors.get(badge.name, 'bg-slate-700') }} text-white rounded-full px-3 py-1 text-[10px] font-bold shadow-md hover:brightness-110 transition-all">
-                        {{ badge.name }}{% if badge.range_label %} {{ badge.range_label }}{% endif %}
-                    </a>
+                    <div class="inline-flex items-center bg-slate-800/90 border border-slate-700/80 rounded-full pl-2.5 pr-1 py-1 shadow-sm gap-2 transition-all store-filter-pill" data-store="{{ badge.name }}">
+                        <label class="inline-flex items-center cursor-pointer select-none" title="Toggle {{ badge.name }} listings">
+                            <input type="checkbox" checked value="{{ badge.name }}" data-store-checkbox="{{ badge.name }}" class="store-checkbox rounded text-blue-600 bg-gray-900 border-gray-500 focus:ring-0 focus:ring-offset-0 h-4 w-4 cursor-pointer">
+                        </label>
+                        <a href="{{ badge.flyer_url }}" target="_blank" class="{{ store_colors.get(badge.name, 'bg-slate-700') }} text-white rounded-full px-3 py-1 text-[10px] font-bold shadow-md hover:brightness-110 transition-all store-badge" title="Open {{ badge.name }} weekly flyer in new tab">
+                            {{ badge.name }}{% if badge.range_label %} {{ badge.range_label }}{% endif %}
+                        </a>
+                    </div>
                     {% endfor %}
                 </div>
                 {% endif %}
@@ -80,9 +94,9 @@
             <h2 class="text-2xl font-bold mb-4 text-white">🔥 Top 6 Deals Overall</h2>
             <div class="border-t-8 border-red-600 rounded-t-lg"></div>
             <div class="bg-white rounded-b-lg shadow p-6 mt-0">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="top-overall-grid">
                     {% for deal in top_overall %}
-                    <div class="bg-gray-50 rounded border p-4 relative overflow-hidden text-gray-800">
+                    <div class="bg-gray-50 rounded border p-4 relative overflow-hidden text-gray-800 deal-card" data-store="{{ deal.store_name }}">
                         <a href="{{ store_flyers.get(deal.store_name, '#') }}" target="_blank" class="absolute top-0 right-0 {{ store_colors.get(deal.store_name, 'bg-blue-500') }} text-white text-xs px-2 py-1 hover:brightness-110 transition-all z-20">{{ deal.store_name }}</a>
                         <span class="text-xs text-gray-400 uppercase font-bold">{{ deal.category }}</span>
                         <h3 class="font-bold text-lg mt-1">{{ deal.item_name }}</h3>
@@ -92,6 +106,9 @@
                         <p class="text-xs text-gray-400 mt-2 text-right">Score: {{ deal.score }}/10</p>
                     </div>
                     {% endfor %}
+                    <div id="top-overall-empty" class="hidden col-span-full text-center py-10 text-gray-500 italic">
+                        No top deals found for the selected stores.
+                    </div>
                 </div>
             </div>
         </section>
@@ -101,13 +118,13 @@
         <section class="mb-10">
             <h2 class="text-2xl font-bold mb-4 text-white">🛒 Top Deals by Category</h2>
             <div class="border-t-8 border-red-600 rounded-t-lg"></div>
-            <div class="bg-white rounded-b-lg shadow p-6 grid grid-cols-1 md:grid-cols-2 gap-8 mt-0">
+            <div class="bg-white rounded-b-lg shadow p-6 grid grid-cols-1 md:grid-cols-2 gap-8 mt-0" id="deals-by-category-grid">
                 {% for category, deals in deals_by_category.items() %}
-                <div>
+                <div class="category-block" data-category-block>
                     <h3 class="text-xl font-bold border-b pb-2 mb-4">{{ category|capitalize }}</h3>
                     <ul class="space-y-3">
                         {% for deal in deals %}
-                        <li class="bg-gray-50 p-4 rounded relative overflow-hidden pt-7 text-gray-800">
+                        <li class="bg-gray-50 p-4 rounded relative overflow-hidden pt-7 text-gray-800 deal-item" data-store="{{ deal.store_name }}">
                             <a href="{{ store_flyers.get(deal.store_name, '#') }}" target="_blank" class="absolute top-0 right-0 {{ store_colors.get(deal.store_name, 'bg-blue-500') }} text-white text-xs px-2 py-0.5 opacity-90 font-medium hover:opacity-100 hover:brightness-110 transition-all z-20">{{ deal.store_name }}</a>
                             <div class="flex justify-between items-start">
                                 <div>
@@ -121,12 +138,15 @@
                     </ul>
                 </div>
                 {% endfor %}
+                <div id="deals-by-category-empty" class="hidden col-span-full text-center py-10 text-gray-500 italic">
+                    No category deals found for the selected stores.
+                </div>
             </div>
         </section>
         {% endif %}
 
         {% if best_store %}
-        <section class="mb-10">
+        <section class="mb-10" id="best-store-section" data-store="{{ best_store.store_name }}">
             <h2 class="text-2xl font-bold mb-4 text-white">🏆 Best Store This Week: {{ best_store.store_name }}</h2>
             <div class="border-t-8 border-red-600 rounded-t-lg"></div>
             <div class="bg-white rounded-b-lg shadow p-6 mt-0">
@@ -245,5 +265,121 @@
             <a href="/admin" class="bg-gray-800 text-gray-200 py-1.5 px-4 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-gray-700 hover:text-white transition-all border border-gray-600">Admin Dashboard</a>
         </footer>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const checkboxes = document.querySelectorAll('.store-checkbox');
+            const dealCards = document.querySelectorAll('.deal-card');
+            const dealItems = document.querySelectorAll('.deal-item');
+            const categoryBlocks = document.querySelectorAll('[data-category-block]');
+            const topOverallEmpty = document.getElementById('top-overall-empty');
+            const dealsByCategoryEmpty = document.getElementById('deals-by-category-empty');
+            const bestStoreSection = document.getElementById('best-store-section');
+            const selectAllBtn = document.getElementById('select-all-stores');
+            const deselectAllBtn = document.getElementById('deselect-all-stores');
+
+            const STORAGE_KEY = 'ff_grocery_store_filter';
+
+            function getCheckedStores() {
+                const checked = new Set();
+                checkboxes.forEach(cb => {
+                    if (cb.checked) checked.add(cb.value);
+                });
+                return checked;
+            }
+
+            function applyFilter() {
+                const checkedStores = getCheckedStores();
+
+                // Update visual styles on pills
+                checkboxes.forEach(cb => {
+                    const pill = cb.closest('.store-filter-pill');
+                    if (!pill) return;
+                    const badge = pill.querySelector('.store-badge');
+                    if (cb.checked) {
+                        pill.classList.remove('opacity-40');
+                        if (badge) badge.classList.remove('filter', 'grayscale', 'line-through');
+                    } else {
+                        pill.classList.add('opacity-40');
+                        if (badge) badge.classList.add('filter', 'grayscale', 'line-through');
+                    }
+                });
+
+                // 1. Top 6 overall deals
+                let visibleTop = 0;
+                dealCards.forEach(card => {
+                    const store = card.getAttribute('data-store');
+                    const show = checkedStores.has(store);
+                    card.classList.toggle('hidden', !show);
+                    if (show) visibleTop++;
+                });
+                if (topOverallEmpty) {
+                    topOverallEmpty.classList.toggle('hidden', visibleTop > 0);
+                }
+
+                // 2. Deals by Category
+                let visibleCategories = 0;
+                categoryBlocks.forEach(block => {
+                    let visibleItemsInCat = 0;
+                    const items = block.querySelectorAll('.deal-item');
+                    items.forEach(item => {
+                        const store = item.getAttribute('data-store');
+                        const show = checkedStores.has(store);
+                        item.classList.toggle('hidden', !show);
+                        if (show) visibleItemsInCat++;
+                    });
+                    block.classList.toggle('hidden', visibleItemsInCat === 0);
+                    if (visibleItemsInCat > 0) visibleCategories++;
+                });
+                if (dealsByCategoryEmpty) {
+                    dealsByCategoryEmpty.classList.toggle('hidden', visibleCategories > 0);
+                }
+
+                // 3. Best Store section
+                if (bestStoreSection) {
+                    const store = bestStoreSection.getAttribute('data-store');
+                    bestStoreSection.classList.toggle('hidden', !checkedStores.has(store));
+                }
+
+                // Persist selection
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(checkedStores)));
+                } catch (e) {}
+            }
+
+            // Restore from localStorage if available
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const savedStores = JSON.parse(saved);
+                    if (Array.isArray(savedStores)) {
+                        checkboxes.forEach(cb => {
+                            cb.checked = savedStores.includes(cb.value);
+                        });
+                    }
+                }
+            } catch (e) {}
+
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', applyFilter);
+            });
+
+            if (selectAllBtn) {
+                selectAllBtn.addEventListener('click', function() {
+                    checkboxes.forEach(cb => { cb.checked = true; });
+                    applyFilter();
+                });
+            }
+
+            if (deselectAllBtn) {
+                deselectAllBtn.addEventListener('click', function() {
+                    checkboxes.forEach(cb => { cb.checked = false; });
+                    applyFilter();
+                });
+            }
+
+            applyFilter();
+        });
+    </script>
 </body>
 </html>

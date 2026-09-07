@@ -79,8 +79,7 @@ async def test_stop_and_shop_scrape_extracts_items_from_flipp_api(mock_logger, m
 
 @pytest.mark.asyncio
 @patch("app.scrapers.stop_and_shop.httpx.AsyncClient")
-@patch("app.scrapers.stop_and_shop.logger")
-async def test_stop_and_shop_scrape_handles_empty_response(mock_logger, mock_async_client):
+async def test_stop_and_shop_scrape_handles_empty_response(mock_async_client):
     empty_response = MagicMock()
     empty_response.raise_for_status = MagicMock()
     empty_response.json.return_value = {"items": []}
@@ -90,9 +89,11 @@ async def test_stop_and_shop_scrape_handles_empty_response(mock_logger, mock_asy
     mock_async_client.return_value.__aenter__.return_value = mock_client_instance
 
     scraper = StopAndShopScraper()
-    dummy_page = AsyncMock()
+    with patch.object(scraper, "_scrape_flipp_overlay", new_callable=AsyncMock) as mock_overlay:
+        mock_overlay.return_value = None
+        dummy_page = AsyncMock()
 
-    result = await scraper.scrape(dummy_page)
+        result = await scraper.scrape(dummy_page)
 
-    assert result is None
-    mock_logger.error.assert_called_once_with("Stop & Shop Flipp API returned no items")
+        assert result is None
+        mock_overlay.assert_awaited_once_with(dummy_page)

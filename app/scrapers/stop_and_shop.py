@@ -1,5 +1,6 @@
 import datetime
 import logging
+import os
 from typing import Dict, List, Optional, Tuple
 
 import httpx
@@ -20,7 +21,7 @@ class StopAndShopScraper(BaseScraper):
     flipp_search_url = "https://backflipp.wishabi.com/flipp/items/search"
     homepage_url = "https://stopandshop.com"
     weekly_ad_url = "https://stopandshop.com/weekly-ad?storeCode=0442"
-    flaresolverr_url = "http://172.20.0.1:8191/v1"
+    flaresolverr_url = os.getenv("FLARESOLVERR_URL", "http://172.20.0.1:8191/v1")
 
     async def scrape(self, page: Page) -> Optional[Dict]:
         logger.info("Fetching %s weekly ad via Flipp API...", self.store_name)
