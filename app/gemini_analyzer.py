@@ -49,62 +49,24 @@ def _parse_price_value(price_str: str) -> Optional[float]:
 
 def _categorize_item(name_lower: str) -> str:
     """Helper function to map item names to categories based on keywords."""
-    # 1. Snacks, crackers, and chips belong in Pantry
-    if any(x in name_lower for x in SNACK_KEYWORDS):
-        return "Pantry"
+    category_rules = [
+        ("Pantry", lambda n: any(x in n for x in SNACK_KEYWORDS)),
+        ("Canned Goods", lambda n: any(x in n for x in ('soup', 'broth', 'stock', 'beans')) or bool(re.search(r"\bcans?\b", n))),
+        ("Produce", lambda n: "tomato" in n),
+        ("Seafood", lambda n: any(x in n for x in ('salmon', 'shrimp', 'tuna', 'swordfish', 'haddock', 'tilapia', 'lobster', 'crab', 'halibut', 'scallop')) or (any(x in n for x in ('fish', 'seafood', 'cod')) and "cape cod" not in n and "goldfish" not in n)),
+        ("Beverages", lambda n: any(bool(re.search(r"\b" + re.escape(b) + r"\b", n)) for b in BEVERAGE_EXACT_WORDS)),
+        ("Meat", lambda n: any(x in n for x in MEAT_KEYWORDS)),
+        ("Bakery", lambda n: any(x in n for x in ('muffin', 'bread', 'bagel', 'donut', 'roll', 'cake', 'pastry', 'croissant', 'brownie', 'crust')) or bool(re.search(r"\bpies?\b", n))),
+        ("Dairy", lambda n: any(x in n for x in ('milk', 'cheese', 'yogurt', 'dairy', 'butter', 'cream', 'creamer')) or bool(re.search(r"\beggs?\b", n))),
+        ("Frozen", lambda n: any(x in n for x in FROZEN_KEYWORDS)),
+        ("Produce", lambda n: any(x in n for x in PRODUCE_KEYWORDS)),
+        ("Household", lambda n: any(x in n for x in HOUSEHOLD_KEYWORDS)),
+        ("Deli", lambda n: any(x in n for x in DELI_KEYWORDS)),
+    ]
 
-    # 2. Soups, broths, and canned staples belong in Canned Goods (check before tomato so tomato soup is canned)
-    if any(x in name_lower for x in ('soup', 'broth', 'stock', 'beans')) or re.search(r"\bcans?\b", name_lower):
-        return "Canned Goods"
-
-    # 3. Fresh tomatoes (even "beefsteak tomatoes") belong in Produce
-    if "tomato" in name_lower:
-        return "Produce"
-
-    # 4. Seafood (checked before meat so "salmon steak" is Seafood, and avoid "cape cod" / "goldfish")
-    if any(x in name_lower for x in ('salmon', 'shrimp', 'tuna', 'swordfish', 'haddock', 'tilapia', 'lobster', 'crab', 'halibut', 'scallop')):
-        return "Seafood"
-    if any(x in name_lower for x in ('fish', 'seafood', 'cod')) and "cape cod" not in name_lower and "goldfish" not in name_lower:
-        return "Seafood"
-
-    # 4. Beverages (use word boundaries for short words like 'tea' to avoid matching 'steak')
-    for b in BEVERAGE_EXACT_WORDS:
-        if re.search(r"\b" + re.escape(b) + r"\b", name_lower):
-            return "Beverages"
-
-    # 5. Meat & Poultry
-    if any(x in name_lower for x in MEAT_KEYWORDS):
-        return "Meat"
-
-    # 6. Bakery (use word boundary for 'pie' to avoid matching 'pier')
-    if any(x in name_lower for x in ('muffin', 'bread', 'bagel', 'donut', 'roll', 'cake', 'pastry', 'croissant', 'brownie', 'crust')):
-        return "Bakery"
-    if re.search(r"\bpies?\b", name_lower):
-        return "Bakery"
-
-    # 7. Dairy (use word boundary for 'egg' to avoid matching other words)
-    if any(x in name_lower for x in ('milk', 'cheese', 'yogurt', 'dairy', 'butter', 'cream', 'creamer')) or re.search(r"\beggs?\b", name_lower):
-        return "Dairy"
-
-    # 8. Frozen
-    if any(x in name_lower for x in FROZEN_KEYWORDS):
-        return "Frozen"
-
-    # 9. Canned Goods
-    if any(x in name_lower for x in ('soup', 'beans', 'broth', 'stock')) or re.search(r"\bcans?\b", name_lower):
-        return "Canned Goods"
-
-    # 10. Produce
-    if any(x in name_lower for x in PRODUCE_KEYWORDS):
-        return "Produce"
-
-    # 11. Household
-    if any(x in name_lower for x in HOUSEHOLD_KEYWORDS):
-        return "Household"
-
-    # 12. Deli
-    if any(x in name_lower for x in DELI_KEYWORDS):
-        return "Deli"
+    for category, match_func in category_rules:
+        if match_func(name_lower):
+            return category
 
     return "Pantry"
 
