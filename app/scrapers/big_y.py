@@ -5,7 +5,6 @@ import re
 from typing import Dict, List, Optional, Tuple
 from playwright.async_api import Page
 
-import httpx
 
 from .base import BaseScraper
 from .flipp_utils import extract_deals_from_overlay_labels, extract_flyer_dates
