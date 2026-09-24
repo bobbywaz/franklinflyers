@@ -159,25 +159,54 @@ def test_events_wheel_includes_upcoming_movies():
     assert "winner-ticket-link" in response.text
 
 
+
+
+
 def test_upcoming_wheel_movies_filters_and_caps():
     """Verify activity wheel movies strictly bound showtimes within 2.5h, deduplicate, and cap at 8."""
     import zoneinfo
     from app.main import _get_upcoming_wheel_movies
-    from app.database import get_db
+    from app.database import get_db, Base, engine
     from app.store_utils import get_active_movie_datasets
+    from app.models import StoreDataset, StoreDeal
+
+    Base.metadata.create_all(bind=engine)
 
     db = next(get_db())
     tz = zoneinfo.ZoneInfo("America/New_York")
+
+    ref_time = datetime.datetime.now(tz).replace(hour=16, minute=15, second=0, microsecond=0)
+
+    # insert dummy movie data
+    ds = StoreDataset(
+        scraper_key='cinemark_hadley',
+        store_name='Cinemark',
+        kind='movie',
+        trigger_mode='manual',
+        status='success',
+        started_at=datetime.datetime.utcnow(),
+        finished_at=datetime.datetime.utcnow(),
+        flyer_start_date=ref_time.date() - datetime.timedelta(days=1),
+        flyer_end_date=ref_time.date() + datetime.timedelta(days=1),
+        expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=7)
+    )
+    db.add(ds)
+    db.commit()
+
+    deal = StoreDeal(
+        dataset=ds,
+        item_name='Fake Movie',
+        sale_price='4:30 PM, 6:00 PM',
+        description='PG-13 • 2 hr'
+    )
+    db.add(deal)
+    db.commit()
+
     active = get_active_movie_datasets(db)
-    if active and active[0].flyer_start_date:
-        ref_time = datetime.datetime.combine(active[0].flyer_start_date, datetime.time(16, 15), tzinfo=tz)
-    else:
-        ref_time = datetime.datetime.now(tz).replace(hour=16, minute=15, second=0, microsecond=0)
 
     # Within 2.5 hours, capped at 8
     movies = _get_upcoming_wheel_movies(db, today=ref_time.date(), max_hours_ahead=2.5, max_movies=8, now_ref=ref_time)
     assert 0 < len(movies) <= 8
-
     # All returned movies must have showtimes within the allowed window
     min_allowed = ref_time - datetime.timedelta(minutes=10)
     max_allowed = ref_time + datetime.timedelta(hours=2.5)

@@ -183,12 +183,53 @@ def test_get_active_pharmacy_datasets():
         db.close()
 
 
+
 def test_pharmacies_route_html():
     """Verify /pharmacies endpoint renders 200 OK with expected markup and navigation."""
-    client = TestClient(app)
+    from app.database import Base, engine, get_db
+    from app.models import StoreDataset, StoreDeal, Configuration
+    import datetime
+    from app.main import app as main_app
+
+    Base.metadata.create_all(bind=engine)
+    db = next(get_db())
+
+    # insert dummy pharmacy data for cvs and walgreens
+    ds1 = StoreDataset(
+        scraper_key='cvs_greenfield',
+        store_name='CVS Pharmacy (Greenfield)',
+        kind='pharmacy',
+        trigger_mode='manual',
+        status='success',
+        started_at=datetime.datetime.utcnow(),
+        finished_at=datetime.datetime.utcnow(),
+        flyer_start_date=datetime.datetime.utcnow().date(),
+        flyer_end_date=(datetime.datetime.utcnow() + datetime.timedelta(days=7)).date(),
+        expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=7)
+    )
+    db.add(ds1)
+    db.commit()
+
+    ds2 = StoreDataset(
+        scraper_key='walgreens_greenfield',
+        store_name='Walgreens (Greenfield)',
+        kind='pharmacy',
+        trigger_mode='manual',
+        status='success',
+        started_at=datetime.datetime.utcnow(),
+        finished_at=datetime.datetime.utcnow(),
+        flyer_start_date=datetime.datetime.utcnow().date(),
+        flyer_end_date=(datetime.datetime.utcnow() + datetime.timedelta(days=7)).date(),
+        expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=7)
+    )
+    db.add(ds2)
+    db.commit()
+
+    client = TestClient(main_app)
     response = client.get("/pharmacies")
     assert response.status_code == 200
     html = response.text
+    assert "Franklin County Pharmacies" in html
     assert "Franklin County Pharmacies" in html
     assert "137 Federal Street" not in html
     assert "5 Pierce Street" not in html
@@ -296,13 +337,76 @@ async def test_analyze_pharmacy_deals_mock():
     assert all(cat in result["deals_by_category"] for cat in PHARMACY_CATEGORIES)
 
 
+
+
+
+
 def test_pharmacies_route_ai_sections():
     """Verify /pharmacies renders AI top deals, department sections, and best store value summary."""
-    client = TestClient(app)
+    from app.database import Base, engine, get_db
+    from app.models import StoreDataset, StoreDeal, Configuration
+    import datetime
+    from app.main import app as main_app
+    import json
+
+    Base.metadata.create_all(bind=engine)
+    db = next(get_db())
+
+    # insert dummy pharmacy data
+    ds = StoreDataset(
+        scraper_key='cvs_greenfield',
+        store_name='CVS Pharmacy (Greenfield)',
+        kind='pharmacy',
+        trigger_mode='manual',
+        status='success',
+        started_at=datetime.datetime.utcnow(),
+        finished_at=datetime.datetime.utcnow(),
+        flyer_start_date=datetime.datetime.utcnow().date(),
+        flyer_end_date=(datetime.datetime.utcnow() + datetime.timedelta(days=7)).date(),
+        expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=7)
+    )
+    db.add(ds)
+    db.commit()
+
+    deal = StoreDeal(
+        dataset=ds,
+        item_name='Chips',
+        sale_price='1.99',
+        description='Snacks'
+    )
+    db.add(deal)
+    db.commit()
+
+    analysis = {
+        "scored_deals": [{"store_name": "CVS Pharmacy (Greenfield)", "category": "Snacks & Beverages", "name": "Chips", "price": "1.99", "score": 10, "explanation": "Cheap!"}],
+        "top_overall": [{"store_name": "CVS Pharmacy (Greenfield)", "category": "Snacks & Beverages", "name": "Chips", "price": "1.99", "score": 10, "explanation": "Cheap!"}],
+        "deals_by_category": {"Snacks & Beverages": [{"store_name": "CVS Pharmacy (Greenfield)", "category": "Snacks & Beverages", "name": "Chips", "price": "1.99", "score": 10, "explanation": "Cheap!"}]},
+        "best_pharmacy": {"store_name": "CVS Pharmacy (Greenfield)", "summary": "Great deals on snacks.", "strengths": "Snacks", "weaknesses": "None", "score": 9}
+    }
+
+    sig = f"{ds.id}_{ds.finished_at.isoformat()}_1"
+
+    cached_config = db.query(Configuration).filter(Configuration.key == "pharmacy_ai_analysis").first()
+    if not cached_config:
+        cached_config = Configuration(key="pharmacy_ai_analysis", value=json.dumps({"sig": sig, "analysis": analysis}))
+        db.add(cached_config)
+    else:
+        cached_config.value = json.dumps({"sig": sig, "analysis": analysis})
+    db.commit()
+
+    # Clear cache
+    import app.main
+    app.main._homepage_cache = {}
+
+    client = TestClient(main_app)
     response = client.get("/pharmacies")
     assert response.status_code == 200
     html = response.text
 
+    assert "Top Pharmacy Deals Overall" in html
+    assert "Top Pharmacy Deals Overall" in html
+    assert "Top Pharmacy Deals Overall" in html
+    assert "Top Pharmacy Deals Overall" in html
     assert "Top Pharmacy Deals Overall" in html
     assert "Top Deals by Department" in html
     assert "Best Pharmacy Value This Week" in html

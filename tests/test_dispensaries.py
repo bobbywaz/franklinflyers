@@ -50,13 +50,53 @@ def test_categorize_weed():
     assert categorize_weed("Live Resin Sugar", "Concentrate 1g Chem Dog") == "Concentrates"
 
 
+
+
 def test_dispensaries_route_uncapped_and_zero_filler():
     """Verify /dispensaries renders genuine deals uncapped without score <= 6 filler items."""
-    client = TestClient(app)
+    from app.database import Base, engine, get_db
+    import datetime
+    from app.main import app as main_app
+    from starlette.testclient import TestClient
+
+    Base.metadata.create_all(bind=engine)
+    db = next(get_db())
+
+    ds = StoreDataset(
+        scraper_key='dispensary',
+        store_name='Dispensary',
+        kind='dispensary',
+        trigger_mode='manual',
+        status='success',
+        started_at=datetime.datetime.utcnow(),
+        finished_at=datetime.datetime.utcnow(),
+        flyer_start_date=datetime.datetime.utcnow().date(),
+        flyer_end_date=(datetime.datetime.utcnow() + datetime.timedelta(days=7)).date(),
+        expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=7)
+    )
+    db.add(ds)
+    db.commit()
+
+    deal = StoreDeal(
+        dataset=ds,
+        item_name='Weed BOGO Free',
+        sale_price='10',
+        description='Weed Buy 1 Get 1 Free promotion'
+    )
+    db.add(deal)
+    db.commit()
+
+    # Clear cache
+    import app.main
+    app.main._homepage_cache = {}
+
+    client = TestClient(main_app)
     response = client.get("/dispensaries")
     assert response.status_code == 200
     html = response.text
 
+    assert "Top Dispensary Deals" in html
+    assert "Top Dispensary Deals" in html
     assert "Top Dispensary Deals" in html
     assert "Top 6 Dispensary Deals" not in html
     assert "Active Dispensary Menus" in html
