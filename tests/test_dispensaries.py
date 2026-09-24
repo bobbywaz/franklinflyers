@@ -52,6 +52,33 @@ def test_categorize_weed():
 
 def test_dispensaries_route_uncapped_and_zero_filler():
     """Verify /dispensaries renders genuine deals uncapped without score <= 6 filler items."""
+    import datetime
+    from app.database import get_db
+
+    db = next(app.dependency_overrides.get(get_db, get_db)()) if hasattr(app, "dependency_overrides") and get_db in app.dependency_overrides else SessionLocal()
+    # clean db first
+    db.query(StoreDataset).delete()
+
+    # insert mock data
+    dataset = StoreDataset(
+        store_name="Mock Dispensary",
+        scraper_key="mock_dispensary",
+        kind="dispensary",
+        trigger_mode="manual",
+        flyer_start_date=datetime.date.today(),
+        flyer_end_date=datetime.date.today() + datetime.timedelta(days=7),
+        status="success",
+        expires_at=utcnow() + datetime.timedelta(days=7)
+    )
+    db.add(dataset)
+    db.commit()
+    db.refresh(dataset)
+
+    deal1 = StoreDeal(dataset_id=dataset.id, item_name="Good Weed", sale_price="$25.00", description="BOGO Free")
+    deal2 = StoreDeal(dataset_id=dataset.id, item_name="Bad Weed", sale_price="$50.00", description="Regular price")
+    db.add_all([deal1, deal2])
+    db.commit()
+
     client = TestClient(app)
     response = client.get("/dispensaries")
     assert response.status_code == 200
@@ -64,3 +91,7 @@ def test_dispensaries_route_uncapped_and_zero_filler():
 
     # Verify score 1/10 filler items are excluded from top deals
     assert "Score: 1/10" not in html
+
+    db.query(StoreDataset).delete()
+    db.commit()
+    db.close()
