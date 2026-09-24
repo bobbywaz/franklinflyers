@@ -18,18 +18,25 @@ def test_api_refresh_authorized():
     def mock_get_db():
         yield MockSession()
 
+    # We should preserve original dependency_overrides just in case
+    # Actually setting it directly might be better
+    # Or just pop get_db
     app.dependency_overrides[get_db] = mock_get_db
 
-    with patch("app.main._is_admin_authenticated", return_value=True):
-        with patch("app.main.BackgroundTasks.add_task") as mock_add_task:
-            client = TestClient(app)
-            response = client.post("/api/refresh")
+    try:
+        with patch("app.main._is_admin_authenticated", return_value=True):
+            with patch("app.main.BackgroundTasks.add_task") as mock_add_task:
+                client = TestClient(app)
+                response = client.post("/api/refresh")
 
-            assert response.status_code == 200
-            assert response.json() == {"message": "Full run started in the background."}
-            mock_add_task.assert_called_once()
+                assert response.status_code == 200
+                assert response.json() == {"message": "Full run started in the background."}
+                mock_add_task.assert_called_once()
 
-            from app.main import run_full_scrape
-            mock_add_task.assert_called_with(run_full_scrape, trigger_mode="manual_full")
-
-    app.dependency_overrides = {}
+                from app.main import run_full_scrape
+                mock_add_task.assert_called_with(run_full_scrape, trigger_mode="manual_full")
+    finally:
+        # Clear only the specific override we added, instead of clearing all overrides
+        # Setting app.dependency_overrides = {} removes overrides for subsequent tests
+        if get_db in app.dependency_overrides:
+            del app.dependency_overrides[get_db]
