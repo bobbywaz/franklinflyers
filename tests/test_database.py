@@ -27,3 +27,15 @@ def test_get_db_yields_session_and_closes():
 
         # Verify that close was called on the session
         mock_session.close.assert_called_once()
+
+@patch("app.database.engine")
+@patch("app.database.Base.metadata.create_all")
+def test_init_db(mock_create_all, mock_engine):
+    """Test that init_db creates all tables."""
+    from app.database import init_db, engine
+
+    # Call init_db
+    init_db()
+
+    # Verify create_all was called with the engine
+    mock_create_all.assert_called_once_with(bind=engine)
