@@ -1,0 +1,3 @@
+sed -i 's/from starlette.testclient import TestClient/from starlette.testclient import TestClient\nfrom unittest.mock import patch, MagicMock\nfrom app.models import StoreDataset, StoreDeal/g' tests/test_dispensaries.py
+
+sed -i 's/client = TestClient(app)/    with patch("app.main.get_active_dispensary_datasets") as mock_get:\n        mock_dataset = MagicMock()\n        mock_dataset.store_name = "Patriot Care"\n        mock_dataset.deals = [MagicMock(item_name="Weed", description="Cheap", sale_price="$10")]\n        mock_get.return_value = [mock_dataset]\n        client = TestClient(app)/g' tests/test_dispensaries.py
