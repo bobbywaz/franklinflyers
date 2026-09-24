@@ -4,7 +4,6 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 import httpx
-import requests
 from playwright.async_api import Page
 
 from .base import BaseScraper
