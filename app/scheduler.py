@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import json
 import logging
@@ -34,6 +35,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 _scheduler: Optional[AsyncIOScheduler] = None
+_scrape_lock = asyncio.Lock()
+_active_scrapers = set()
 
 SCRAPER_KEY_BY_STORE_NAME = {
     "ALDI": "aldi",
@@ -50,68 +53,109 @@ async def run_scrape_and_analyze():
 
 async def run_full_scrape(trigger_mode: str = "scheduled_full") -> Optional[Run]:
     logger.info("--- STARTING FULL SCRAPE JOB (%s) ---", trigger_mode)
-    manager = ScraperManager()
-    results = await manager.run_full_batch(run_date=utcnow().strftime("%Y-%m-%d %H:%M"))
+    async with _scrape_lock:
+        manager = ScraperManager()
+        results = await manager.run_full_batch(run_date=utcnow().strftime("%Y-%m-%d %H:%M"))
 
-    db = SessionLocal()
-    try:
-        failed_by_store = {}
-        for result in results:
-            persisted = _persist_scrape_result(db, result, trigger_mode)
-            if persisted.status == STATUS_FAILED:
-                failed_by_store[persisted.store_name] = persisted.error_message or "Scrape failed"
+        db = SessionLocal()
+        try:
+            failed_by_store = {}
+            for result in results:
+                persisted = _persist_scrape_result(db, result, trigger_mode)
+                if persisted.status == STATUS_FAILED:
+                    failed_by_store[persisted.store_name] = persisted.error_message or "Scrape failed"
 
-        db.flush()
-        published_run = await _publish_active_grocery_snapshot(
-            db,
-            trigger_mode=trigger_mode,
-            failed_by_store=failed_by_store,
-        )
-        db.commit()
-        _sync_dynamic_refresh_jobs()
-        return published_run
-    except Exception as e:
-        db.rollback()
-        logger.error("FATAL ERROR in full scrape job: %s", e, exc_info=True)
-        return None
-    finally:
-        db.close()
+            db.flush()
+            published_run = await _publish_active_grocery_snapshot(
+                db,
+                trigger_mode=trigger_mode,
+                failed_by_store=failed_by_store,
+            )
+            db.commit()
+            _sync_dynamic_refresh_jobs()
+            return published_run
+        except Exception as e:
+            db.rollback()
+            logger.error("FATAL ERROR in full scrape job: %s", e, exc_info=True)
+            return None
+        finally:
+            db.close()
+
+
+async def run_grocery_scrape(trigger_mode: str = "manual_grocery") -> Optional[Run]:
+    logger.info("--- STARTING GROCERY BATCH SCRAPE JOB (%s) ---", trigger_mode)
+    async with _scrape_lock:
+        manager = ScraperManager()
+        results = await manager.run_grocery_batch(run_date=utcnow().strftime("%Y-%m-%d %H:%M"))
+
+        db = SessionLocal()
+        try:
+            failed_by_store = {}
+            for result in results:
+                persisted = _persist_scrape_result(db, result, trigger_mode)
+                if persisted.status == STATUS_FAILED:
+                    failed_by_store[persisted.store_name] = persisted.error_message or "Scrape failed"
+
+            db.flush()
+            published_run = await _publish_active_grocery_snapshot(
+                db,
+                trigger_mode=trigger_mode,
+                failed_by_store=failed_by_store,
+            )
+            db.commit()
+            _sync_dynamic_refresh_jobs()
+            return published_run
+        except Exception as e:
+            db.rollback()
+            logger.error("FATAL ERROR in grocery scrape job: %s", e, exc_info=True)
+            return None
+        finally:
+            db.close()
 
 
 async def run_single_scrape(scraper_key: str, trigger_mode: str = "manual_single") -> Optional[StoreDataset]:
-    logger.info("--- STARTING SINGLE SCRAPE JOB for %s (%s) ---", scraper_key, trigger_mode)
-    check_db = SessionLocal()
-    try:
-        had_active_before = get_active_dataset_by_key(check_db, scraper_key) is not None
-    finally:
-        check_db.close()
-
-    manager = ScraperManager()
-    result = await manager.run_single(scraper_key, run_date=utcnow().strftime("%Y-%m-%d %H:%M"))
-
-    db = SessionLocal()
-    try:
-        persisted = _persist_scrape_result(db, result, trigger_mode)
-        if (
-            persisted.status == STATUS_SUCCESS
-            and persisted.kind == GROCERY_KIND
-            and not had_active_before
-        ):
-            db.flush()
-            await _publish_active_grocery_snapshot(
-                db,
-                trigger_mode=f"{trigger_mode}_repair_publish",
-                failed_by_store={},
-            )
-        db.commit()
-        _sync_dynamic_refresh_jobs()
-        return persisted
-    except Exception as e:
-        db.rollback()
-        logger.error("FATAL ERROR in single scrape job for %s: %s", scraper_key, e, exc_info=True)
+    if scraper_key in _active_scrapers and trigger_mode == "manual_single":
+        logger.info("Scraper %s is already running or queued; skipping duplicate trigger", scraper_key)
         return None
+
+    _active_scrapers.add(scraper_key)
+    try:
+        async with _scrape_lock:
+            logger.info("--- STARTING SINGLE SCRAPE JOB for %s (%s) ---", scraper_key, trigger_mode)
+            check_db = SessionLocal()
+            try:
+                had_active_before = get_active_dataset_by_key(check_db, scraper_key) is not None
+            finally:
+                check_db.close()
+
+            manager = ScraperManager()
+            result = await manager.run_single(scraper_key, run_date=utcnow().strftime("%Y-%m-%d %H:%M"))
+
+            db = SessionLocal()
+            try:
+                persisted = _persist_scrape_result(db, result, trigger_mode)
+                if (
+                    persisted.status == STATUS_SUCCESS
+                    and persisted.kind == GROCERY_KIND
+                    and not had_active_before
+                ):
+                    db.flush()
+                    await _publish_active_grocery_snapshot(
+                        db,
+                        trigger_mode=f"{trigger_mode}_repair_publish",
+                        failed_by_store={},
+                    )
+                db.commit()
+                _sync_dynamic_refresh_jobs()
+                return persisted
+            except Exception as e:
+                db.rollback()
+                logger.error("FATAL ERROR in single scrape job for %s: %s", scraper_key, e, exc_info=True)
+                return None
+            finally:
+                db.close()
     finally:
-        db.close()
+        _active_scrapers.discard(scraper_key)
 
 
 def start_scheduler():
@@ -314,9 +358,10 @@ def _sync_dynamic_refresh_jobs():
     now = utcnow()
     try:
         manager = ScraperManager()
+        overdue_offset = 15
         for card in manager.list_scrapers():
             scraper_key = card["scraper_key"]
-            if scraper_key == "full_run":
+            if scraper_key in ("full_run", "grocery_run") or card.get("kind") == "batch":
                 continue
 
             job_id = f"refresh_{scraper_key}"
@@ -325,7 +370,8 @@ def _sync_dynamic_refresh_jobs():
             if dataset and dataset.next_refresh_at:
                 run_date = dataset.next_refresh_at
                 if run_date <= now:
-                    run_date = now + datetime.timedelta(seconds=15)
+                    run_date = now + datetime.timedelta(seconds=overdue_offset)
+                    overdue_offset += 20
                 _scheduler.add_job(
                     run_single_scrape,
                     DateTrigger(run_date=run_date),
@@ -334,9 +380,10 @@ def _sync_dynamic_refresh_jobs():
                     replace_existing=True,
                 )
             else:
+                retry_minutes = int(os.getenv("SCRAPE_RETRY_MINUTES", "30"))
                 _scheduler.add_job(
                     run_single_scrape,
-                    DateTrigger(run_date=now + datetime.timedelta(minutes=1)),
+                    DateTrigger(run_date=now + datetime.timedelta(minutes=retry_minutes)),
                     kwargs={"scraper_key": scraper_key, "trigger_mode": "scheduled_retry"},
                     id=job_id,
                     replace_existing=True,

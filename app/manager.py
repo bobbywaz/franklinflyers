@@ -92,10 +92,15 @@ class ScraperManager:
     def list_scrapers(self) -> List[Dict]:
         cards = [
             {
+                "scraper_key": "grocery_run",
+                "store_name": "All Groceries",
+                "kind": "batch",
+            },
+            {
                 "scraper_key": "full_run",
                 "store_name": "Full Run",
                 "kind": "batch",
-            }
+            },
         ]
         for scraper_key in self.scraper_order:
             scraper = self.registry[scraper_key]
@@ -118,19 +123,45 @@ class ScraperManager:
             try:
                 result = await self._execute_scraper(scraper_key, context, run_date=run_date)
             finally:
+                await context.close()
                 await browser.close()
         return result
+
+    async def run_grocery_batch(self, run_date: str = None) -> List[Dict]:
+        results = []
+        grocery_keys = [
+            scraper.scraper_key
+            for scraper in self.registry.values()
+            if getattr(scraper, "kind", "") == "grocery"
+        ]
+        async with async_playwright() as playwright:
+            browser = await playwright.chromium.launch(headless=True)
+            try:
+                for scraper_key in grocery_keys:
+                    context = await browser.new_context(
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+                    )
+                    try:
+                        results.append(await self._execute_scraper(scraper_key, context, run_date=run_date))
+                    finally:
+                        await context.close()
+            finally:
+                await browser.close()
+        return results
 
     async def run_full_batch(self, run_date: str = None) -> List[Dict]:
         results = []
         async with async_playwright() as playwright:
             browser = await playwright.chromium.launch(headless=True)
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-            )
             try:
                 for scraper_key in self.scraper_order:
-                    results.append(await self._execute_scraper(scraper_key, context, run_date=run_date))
+                    context = await browser.new_context(
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+                    )
+                    try:
+                        results.append(await self._execute_scraper(scraper_key, context, run_date=run_date))
+                    finally:
+                        await context.close()
             finally:
                 await browser.close()
         return results

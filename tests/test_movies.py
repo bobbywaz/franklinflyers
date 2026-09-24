@@ -164,10 +164,15 @@ def test_upcoming_wheel_movies_filters_and_caps():
     import zoneinfo
     from app.main import _get_upcoming_wheel_movies
     from app.database import get_db
+    from app.store_utils import get_active_movie_datasets
 
     db = next(get_db())
     tz = zoneinfo.ZoneInfo("America/New_York")
-    ref_time = datetime.datetime(2026, 9, 6, 16, 15, tzinfo=tz)
+    active = get_active_movie_datasets(db)
+    if active and active[0].flyer_start_date:
+        ref_time = datetime.datetime.combine(active[0].flyer_start_date, datetime.time(16, 15), tzinfo=tz)
+    else:
+        ref_time = datetime.datetime.now(tz).replace(hour=16, minute=15, second=0, microsecond=0)
 
     # Within 2.5 hours, capped at 8
     movies = _get_upcoming_wheel_movies(db, today=ref_time.date(), max_hours_ahead=2.5, max_movies=8, now_ref=ref_time)

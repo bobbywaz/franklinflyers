@@ -199,3 +199,49 @@ async def test_failed_single_scrape_keeps_previous_active_data(mock_session_loca
     assert active_dataset is not None
     assert active_dataset.status == "success"
     assert db_session.query(StoreDataset).count() == 2
+
+
+@pytest.mark.asyncio
+async def test_concurrent_single_scrapes_are_serialized(mock_session_local, mock_sync_jobs, db_session):
+    import asyncio
+    active_runs = 0
+    max_concurrent = 0
+
+    async def mock_run_single(key, run_date=None):
+        nonlocal active_runs, max_concurrent
+        active_runs += 1
+        if active_runs > max_concurrent:
+            max_concurrent = active_runs
+        await asyncio.sleep(0.05)
+        active_runs -= 1
+        return {
+            "scraper_key": key,
+            "store_name": key.title(),
+            "kind": "grocery",
+            "status": "success",
+            "error_message": None,
+            "payload": {
+                "scraper_key": key,
+                "store_name": key.title(),
+                "kind": "grocery",
+                "deals": [{"name": f"{key} item", "price": "1.00"}],
+                "item_count": 1,
+                "items_scraped_count": 1,
+                "flyer_start_date": datetime.date.today(),
+                "flyer_end_date": datetime.date.today() + datetime.timedelta(days=6),
+                "expires_at": datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + datetime.timedelta(days=6),
+                "next_refresh_at": datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + datetime.timedelta(days=5),
+            }
+        }
+
+    with patch("app.scheduler.ScraperManager") as MockManager:
+        MockManager.return_value.run_single = mock_run_single
+        # Launch multiple stores concurrently
+        await asyncio.gather(
+            run_single_scrape("aldi", trigger_mode="manual_single"),
+            run_single_scrape("big_y", trigger_mode="manual_single"),
+            run_single_scrape("food_city", trigger_mode="manual_single"),
+        )
+
+    # Verify that at no point did more than 1 scraper run at the same time
+    assert max_concurrent == 1

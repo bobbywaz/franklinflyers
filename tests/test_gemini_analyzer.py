@@ -48,7 +48,7 @@ async def test_analyze_deals_normal_mode():
                 "item_name": "Weird Thing",
                 "sale_price": "5.00",
                 "category": "unknown_category", # test default mapping
-                "score": 5,
+                "score": 8,
                 "explanation": "Okay"
             }
         ],
@@ -131,3 +131,50 @@ async def test_analyze_deals_markdown_parsing():
     # Verify the markdown was stripped and JSON parsed correctly
     assert result["scored_deals"][0]["item_name"] == "Apples"
     assert result["best_store"]["score"] == 10
+
+
+def test_rule_based_analyze_curates_top_deals_and_filters_filler():
+    """Verify rule-based analyzer rejects filler and shows all really good deals without artificial hard cap."""
+    analyzer = GeminiAnalyzer()
+
+    # Generate 55 deals: 15 high-value BOGOs (score 9-10), 10 good deals (score 8), 30 filler (score 6)
+    deals = []
+    # 15 BOGOs
+    for i in range(15):
+        deals.append({
+            "store_name": "Store A",
+            "name": f"BOGO Item {i}",
+            "price": "BUY 1 GET 1 FREE",
+            "description": "Family Pack",
+        })
+    # 10 good deals
+    for i in range(10):
+        deals.append({
+            "store_name": "Store B",
+            "name": f"Chicken Breast {i}",
+            "price": "$1.99/lb",
+            "description": "Fresh",
+        })
+    # 30 filler items
+    for i in range(30):
+        deals.append({
+            "store_name": "Store A",
+            "name": f"Filler Soda {i}",
+            "price": "$4.99",
+            "description": "Standard",
+        })
+
+    result = analyzer._rule_based_analyze(deals)
+    scored = result["scored_deals"]
+
+    # All 25 really good deals must be included (no artificial hard number cap)
+    assert len(scored) == 25
+
+    # Every deal shown must be a really good deal (score >= 8), zero filler
+    for d in scored:
+        assert d["score"] >= 8
+        assert "Filler Soda" not in d["item_name"]
+
+    # Explicit cap is still respected if requested
+    capped = analyzer._curate_top_deals(result["scored_deals"], max_deals=10)
+    assert len(capped) == 10

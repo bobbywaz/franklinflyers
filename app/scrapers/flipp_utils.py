@@ -43,25 +43,56 @@ def parse_overlay_label(label: str) -> Optional[Dict]:
     }
 
 def extract_flyer_dates(main_text: str) -> Tuple[Optional[datetime.date], Optional[datetime.date]]:
-    match = re.search(
-        r"([A-Za-z]{3,9}\s+\d{1,2})(?:st|nd|rd|th)?\s*-\s*([A-Za-z]{3,9}\s+\d{1,2})(?:st|nd|rd|th)?",
-        main_text,
-        flags=re.IGNORECASE,
+    matches = list(
+        re.finditer(
+            r"([A-Za-z]{3,9}\s+\d{1,2})(?:st|nd|rd|th)?\s*-\s*([A-Za-z]{3,9}\s+\d{1,2})(?:st|nd|rd|th)?",
+            main_text,
+            flags=re.IGNORECASE,
+        )
     )
-    if not match:
+    if not matches:
         return None, None
 
     current_year = datetime.date.today().year
-    try:
-        start = datetime.datetime.strptime(f"{match.group(1)} {current_year}", "%b %d %Y").date()
-    except ValueError:
-        start = datetime.datetime.strptime(f"{match.group(1)} {current_year}", "%B %d %Y").date()
+    today = datetime.date.today()
 
-    try:
-        end = datetime.datetime.strptime(f"{match.group(2)} {current_year}", "%b %d %Y").date()
-    except ValueError:
-        end = datetime.datetime.strptime(f"{match.group(2)} {current_year}", "%B %d %Y").date()
+    scored = []
+    for m in matches:
+        try:
+            start = datetime.datetime.strptime(f"{m.group(1)} {current_year}", "%b %d %Y").date()
+        except ValueError:
+            try:
+                start = datetime.datetime.strptime(f"{m.group(1)} {current_year}", "%B %d %Y").date()
+            except ValueError:
+                continue
 
-    if end < start:
-        end = end.replace(year=end.year + 1)
-    return start, end
+        try:
+            end = datetime.datetime.strptime(f"{m.group(2)} {current_year}", "%b %d %Y").date()
+        except ValueError:
+            try:
+                end = datetime.datetime.strptime(f"{m.group(2)} {current_year}", "%B %d %Y").date()
+            except ValueError:
+                continue
+
+        if end < start:
+            end = end.replace(year=end.year + 1)
+
+        before_lines = [l.strip().lower() for l in main_text[:m.start()].splitlines()[-4:] if l.strip()]
+        after_lines = [l.strip().lower() for l in main_text[m.end():].splitlines()[:4] if l.strip()]
+
+        score = 0
+        if any("expired" in l for l in before_lines):
+            score -= 100
+        if any("weekly ad" in l for l in before_lines):
+            score += 50
+        if any("selected" in l for l in before_lines + after_lines):
+            score += 30
+        if end >= today:
+            score += 20
+        scored.append((score, start, end))
+
+    if not scored:
+        return None, None
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return scored[0][1], scored[0][2]

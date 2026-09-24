@@ -16,7 +16,7 @@ from .database import SessionLocal, get_db, init_db
 from .gemini_analyzer import GeminiAnalyzer, PHARMACY_CATEGORIES
 from .manager import ScraperManager
 from .models import Configuration, Run, StoreDataset
-from .scheduler import run_full_scrape, run_single_scrape, start_scheduler
+from .scheduler import run_full_scrape, run_grocery_scrape, run_single_scrape, start_scheduler
 from .store_utils import (
     STATUS_SUCCESS,
     format_date_range,
@@ -145,11 +145,12 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
 
     for entry in manager.list_scrapers():
         scraper_key = entry["scraper_key"]
-        if scraper_key == "full_run":
+        if scraper_key in ("full_run", "grocery_run"):
+            is_grocery = (scraper_key == "grocery_run")
             cards.append(
                 {
-                    "scraper_key": "full_run",
-                    "name": "Full Run",
+                    "scraper_key": scraper_key,
+                    "name": "All Groceries" if is_grocery else "Full Run",
                     "kind": "batch",
                     "public_status": "Published" if latest_run else "Missing",
                     "latest_status": "Ready" if latest_run else "Never Run",
@@ -239,40 +240,73 @@ def categorize_weed(name: str, desc: str) -> str:
 
 def get_discount_percentage(name: str, desc: str, price_str: str) -> float:
     import re
+    combined = f"{name} {desc}".lower()
+
+    # 1. BOGOs
+    if "buy 1 get 1" in combined or "bogo" in combined:
+        return 0.50
+    if "buy 2 get 1" in combined:
+        return 0.33
+
+    # 2. Explicit percentage off
+    pct_match = re.search(r"(\d{1,2})\s*%\s*(?:off|discount|savings)", combined)
+    if pct_match:
+        return float(pct_match.group(1)) / 100.0
+
+    # 3. Regular vs sale price
     price_val = None
     reg_val = None
     price_match = re.search(r"\$(\d+(?:\.\d+)?)", price_str)
     if price_match:
         price_val = float(price_match.group(1))
-    reg_match = re.search(r"sale from \$(\d+(?:\.\d+)?)", desc.lower())
+    reg_match = re.search(r"(?:sale from|was|regular|reg|save)\s*\$(\d+(?:\.\d+)?)", combined)
     if reg_match:
         reg_val = float(reg_match.group(1))
     if price_val and reg_val and reg_val > price_val:
         return (reg_val - price_val) / reg_val
-    return 0.15
+
+    return 0.0
+
+
+def score_weed_deal(discount: float) -> int:
+    """Score cannabis promotions strictly by value depth.
+    10: BOGO / 50%+ off
+    9: 30% - 49% off
+    8: 20% - 29% off
+    7: 15% - 19% off
+    6: 10% - 14% off
+    1-5: <10% off or regular menu price (filler)
+    """
+    if discount >= 0.50:
+        return 10
+    elif discount >= 0.30:
+        return 9
+    elif discount >= 0.20:
+        return 8
+    elif discount >= 0.15:
+        return 7
+    elif discount >= 0.10:
+        return 6
+    elif discount > 0.0:
+        return 5
+    return 1
 
 
 @app.get("/dispensaries", response_class=HTMLResponse)
 async def read_dispensaries(request: Request, db: Session = Depends(get_db)):
     from .store_utils import get_active_dispensary_datasets
     active_datasets = get_active_dispensary_datasets(db)
-    
+
     all_deals = []
     store_deals_map = {}
-    
+
     for dataset in active_datasets:
         store_deals_map[dataset.store_name] = []
         for deal in dataset.deals:
             category = categorize_weed(deal.item_name, deal.description or "")
             discount = get_discount_percentage(deal.item_name, deal.description or "", deal.sale_price)
-            # Map discount range [0.15, 0.35] to score [1, 10]
-            if discount <= 0.15:
-                score = 1
-            elif discount >= 0.35:
-                score = 10
-            else:
-                score = 1 + int(9 * (discount - 0.15) / (0.35 - 0.15))
-            
+            score = score_weed_deal(discount)
+
             deal_dict = {
                 "id": deal.id,
                 "store_name": dataset.store_name,
@@ -281,44 +315,44 @@ async def read_dispensaries(request: Request, db: Session = Depends(get_db)):
                 "description": deal.description or "",
                 "category": category,
                 "score": score,
-                "discount": discount
+                "discount": discount,
             }
             all_deals.append(deal_dict)
             store_deals_map[dataset.store_name].append(deal_dict)
-            
-    top_overall = sorted(all_deals, key=lambda x: x["discount"], reverse=True)[:6]
-    
+
+    # Filter for genuine deals: show all really good deals (score >= 8), 0 filler (score <= 6)
+    good_deals = [d for d in all_deals if d["score"] >= 8]
+    if not good_deals and all_deals:
+        good_deals = [d for d in all_deals if d["score"] >= 7]
+
+    # No hard cap! Show all genuine high-value deals sorted by discount depth
+    top_overall = sorted(good_deals, key=lambda x: (x["score"], x["discount"]), reverse=True)
+
     deals_by_category = {}
-    for deal in all_deals:
+    for deal in good_deals:
         deals_by_category.setdefault(deal["category"], []).append(deal)
-        
+
     best_store = None
     if store_deals_map:
         store_stats = []
         for store_name, deals in store_deals_map.items():
-            if deals:
-                avg_discount = sum(d["discount"] for d in deals) / len(deals)
+            discounted = [d for d in deals if d["discount"] > 0]
+            if discounted:
+                avg_discount = sum(d["discount"] for d in discounted) / len(discounted)
                 store_stats.append({
                     "store_name": store_name,
                     "avg_discount": avg_discount,
-                    "deal_count": len(deals)
+                    "deal_count": len(discounted),
                 })
         if store_stats:
             best = max(store_stats, key=lambda x: x["avg_discount"])
-            avg_d = best["avg_discount"]
-            if avg_d <= 0.15:
-                best_score = 1
-            elif avg_d >= 0.35:
-                best_score = 10
-            else:
-                best_score = 1 + int(9 * (avg_d - 0.15) / (0.35 - 0.15))
-                
+            best_score = score_weed_deal(best["avg_discount"])
             best_store = {
                 "store_name": best["store_name"],
                 "score": best_score,
-                "summary": f"{best['store_name']} offers the highest average savings of {int(best['avg_discount'] * 100)}% across {best['deal_count']} deals this week.",
-                "strengths": "High percentage discounts on premium flower and cartridges.",
-                "weaknesses": "Popular strains sell out quickly; online pre-ordering recommended."
+                "summary": f"{best['store_name']} offers the highest average savings of {int(best['avg_discount'] * 100)}% across {best['deal_count']} verified sale deals this week.",
+                "strengths": "Deep promotional discounts on premium flower, concentrates, and vape cartridges.",
+                "weaknesses": "Popular sale strains sell out quickly; online pre-ordering recommended.",
             }
             
     DISPENSARY_URLS = {
@@ -1022,7 +1056,18 @@ async def admin_run_full(request: Request, background_tasks: BackgroundTasks, db
         return redirect
 
     background_tasks.add_task(run_full_scrape, trigger_mode="manual_full")
-    context = _build_admin_context(request, db, message="Full run started in the background.")
+    context = _build_admin_context(request, db, message="Full run queued in the background.")
+    return templates.TemplateResponse(request=request, name="admin.html", context=context)
+
+
+@app.post("/admin/run/groceries", response_class=HTMLResponse)
+async def admin_run_groceries(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    redirect = _require_admin(request)
+    if redirect:
+        return redirect
+
+    background_tasks.add_task(run_grocery_scrape, trigger_mode="manual_grocery")
+    context = _build_admin_context(request, db, message="All groceries run queued in the background.")
     return templates.TemplateResponse(request=request, name="admin.html", context=context)
 
 
@@ -1032,13 +1077,17 @@ async def admin_run_single(scraper_key: str, request: Request, background_tasks:
     if redirect:
         return redirect
 
-    valid_scraper_keys = {entry["scraper_key"] for entry in ScraperManager().list_scrapers() if entry["scraper_key"] != "full_run"}
+    valid_scraper_keys = {
+        entry["scraper_key"]
+        for entry in ScraperManager().list_scrapers()
+        if entry["scraper_key"] not in ("full_run", "grocery_run")
+    }
     if scraper_key not in valid_scraper_keys:
         context = _build_admin_context(request, db, error=f"Unknown scraper '{scraper_key}'.")
         return templates.TemplateResponse(request=request, name="admin.html", context=context, status_code=404)
 
     background_tasks.add_task(run_single_scrape, scraper_key=scraper_key, trigger_mode="manual_single")
-    context = _build_admin_context(request, db, message=f"{scraper_key} started in the background.")
+    context = _build_admin_context(request, db, message=f"{scraper_key} queued in the background.")
     return templates.TemplateResponse(request=request, name="admin.html", context=context)
 
 

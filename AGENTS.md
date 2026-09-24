@@ -29,6 +29,55 @@ Store-level persistence is the source of truth:
 - A failed attempt must not erase an older still-valid successful dataset.
 - `runs`, `deals`, `best_stores`, and `published_snapshot_stores` are published grocery-analysis snapshots, not raw scraper history.
 
+## Strict Zero-Mock Policy
+
+Under NO circumstances should mock listings, dummy test data, synthetic placeholders, or the word "mock" ever be rendered to users or persisted into production database tables (`deals`, `best_stores`, `store_deals`, `runs`, `configurations`).
+
+1. **No Fake / Mock Text**:
+   - Never write phrases like `"This is a mock evaluation for..."` or `"...in our mock analysis."` into deal explanations, store summaries, recipe ideas, or UI templates.
+   - All public listings must represent authentic, scraped circular data or real local community events.
+
+2. **Resilient Rule-Based Fallbacks**:
+   - External AI services (such as the Gemini API) can be unavailable, time out, or run out of credits (e.g. HTTP 402 `RESOURCE_EXHAUSTED`).
+   - When Gemini or external AI fails or is unconfigured, fallback handling MUST be strictly deterministic and rule-based (e.g. `_score_grocery_item`, `_rule_based_analyze`, `_score_pharmacy_item`, `_rule_based_analyze_pharmacy`) or use genuine curated circular items.
+   - Rule-based analysis must calculate realistic scores (1-10) based on actual pricing signals (BOGO, volume free, price/lb, bundle discounts) and generate factual, professional explanations and store evaluations.
+   - Seasonal guides and recipe generators must derive from actual calendar seasons and authentic deal ingredients, never hardcoded dummy strings.
+
+3. **Test Isolation**:
+   - Mocks, MagicMocks, and synthetic test fixtures are strictly restricted to the `tests/` directory.
+   - Test-only mocks must never leak into application code (`app/`), scraper execution, fallback logic, or database storage.
+
+## Deal Curation Policy (Zero-Filler, No Hard Cap)
+
+The entire purpose of Franklin Flyers is to highlight only genuine, high-value deals and protect users from supermarket promotional filler ("if it's a really good deal show it, otherwise don't"):
+
+1. **No Artificial Hard Number Cap**:
+   - Do not enforce an artificial hard number or quota (e.g. capped at 20 groceries, 6 dispensaries, or 8 pharmacies).
+   - If there are 18 standout deals across our local stores this week, show 18. If there are 45, show all 45.
+
+2. **Qualifying Standout Grocery Deals (Score $\ge$ 8 Only)**:
+   - Only genuinely great deals qualify for publication:
+     * **BOGO Free & Volume Free Deals**: True Buy 1 Get 1 Free, Buy 2 Get 2 Free, straight 50% discounts (scores 9–10).
+     * **Stock-Up $1 Mix & Match**: 10 for $10, 5 for $5, 4 for $4, or essential staples priced $\le$ $1.50.
+     * **Deep Protein Discounts**: Poultry $\le$ $1.49/lb (e.g. 99¢ drumsticks/quarters), boneless chicken breast/tenders $\le$ $2.49/lb, fresh pork $\le$ $3.49/lb, ground beef $\le$ $4.99/lb, beef roasts/steaks $\le$ $6.99/lb, fresh salmon/shrimp $\le$ $9.99/lb.
+     * **True Produce Bargains**: Fruits and vegetables $\le$ $1.00/lb (e.g. 88¢/99¢ apples, 99¢ peppers/squash, 49¢ bananas) or bulk produce bags $\le$ $2.99.
+
+3. **Qualifying Standout Weed / Dispensary Deals (Score $\ge$ 8 Only)**:
+   - True BOGO / 50%+ off: Score 10.
+   - 30% - 49% off: Score 9 (e.g. $40 flower down to $28, $45 vape down to $30).
+   - 20% - 29% off: Score 8 (verified promotional sale).
+   - Regular menu items and discounts < 10% (scores 1–5) are excluded as filler.
+
+4. **Qualifying Standout Pharmacy Deals (Score $\ge$ 8 Only)**:
+   - True BOGOs, Buy 1 Get 2 Free, Buy 2 Get 2 Free: Scores 9–10.
+   - High-value rewards ($10+ ExtraBucks / Walgreens cash): Scores 9–10.
+   - Standard 20¢ manufacturer coupons and baseline retail pricing (scores $\le$ 6) are excluded as filler.
+
+5. **Zero-Cost Rule Engine & Legacy Gemini API Archive**:
+   - All AI analysis and curation across groceries, dispensaries, and pharmacies run deterministically at $0 API cost using the user's host Antigravity (`agy`) subscription.
+   - All legacy Google GenAI API client calls, prompts, and JSON parsers are preserved safely in `app/legacy_gemini.py`.
+   - By default, `USE_LEGACY_GEMINI=false`, preventing paid Gemini API token usage or 402 `RESOURCE_EXHAUSTED` billing errors. Set `USE_LEGACY_GEMINI=true` only if Gemini API credits are funded.
+
 ## Scraper Registry
 
 Current registered keys, in manager order by category:
@@ -39,7 +88,7 @@ Current registered keys, in manager order by category:
 - Events: `shea_theater`, `rendezvous`, `tree_house`, `northampton_live`, `four_phantoms`, `franklin_chamber`, `shelburne_falls`, `visit_greenfield`
 - Movies: `greenfield_garden_cinemas`, `cinemark_hadley`
 
-`full_run` is a synthetic admin card, not a scraper key. Hawks & Reed is retired and must not be re-added; stale `hawks_and_reed` event datasets are excluded from active event results.
+`grocery_run` and `full_run` are synthetic admin cards, not scraper keys. Hawks & Reed is retired and must not be re-added; stale `hawks_and_reed` event datasets are excluded from active event results.
 
 Every scraper should return a normalized result through `BaseScraper.build_result()`:
 
@@ -79,8 +128,8 @@ Current event sources:
 
 - ALDI: the old Flipp URL redirects to the current storefront. Extract storefront product cards directly; retain the legacy iframe path only as fallback. Gemini is used for the screenshot-analysis fallback.
 - Big Y: uses FlareSolverr cookies/UA, in-browser store API activation, and Flipp `button.item-overlay` labels. Use `wait_until="commit"` for the weekly-ad page. ZIP search is `01376`; Greenfield may resolve to store ZIP `01301`.
-- Food City: downloads the weekly-ad PDF and uses Gemini extraction. The PDF is currently image-only, so local text extraction is not sufficient.
-- Foster's: downloads its weekly-ad PDF and uses Gemini extraction.
+- Food City: downloads the weekly-ad PDF and uses Gemini extraction. If Gemini credits are depleted or unavailable, it uses PDF URL date extraction and resilient weekly circular deal fallbacks for Turners Falls.
+- Foster's: downloads its weekly-ad PDF and extracts deals and dates directly from the InDesign vector PDF text streams with pure local parsing, with Gemini extraction as optional secondary fallback.
 - Stop & Shop: use the Backflipp API path first for Greenfield (`postal_code=01376`, store code `0442`); browser extraction is only fallback because of anti-bot challenges.
 
 ## Movie Scraper Notes
@@ -101,7 +150,12 @@ Current event sources:
 - Do not add a fixed weekday full-scrape cron for normal refreshes.
 - Each successful dataset gets `expires_at` and `next_refresh_at`, normally one day before its flyer/event window ends.
 - APScheduler installs one date-triggered refresh job per scraper from `next_refresh_at`.
+- Overdue scheduled refresh jobs are staggered in 20-second increments to avoid APScheduler burst collisions.
+- **Scraper Concurrency & Serialization**: Scraper executions (single runs, grocery batch runs, and full runs) are strictly serialized through an asyncio concurrency lock (`_scrape_lock` in `app/scheduler.py`). Multiple simultaneous trigger requests (manual or scheduled) are queued and executed one-at-a-time to prevent Playwright resource exhaustion, FlareSolverr session conflicts, and SQLite database locking. Duplicate manual triggers for an already queued/running scraper are safely deduplicated.
+- **Browser Context Isolation**: Batch executions (`run_grocery_batch`, `run_full_batch`) allocate and close an isolated browser context (`browser.new_context()`) per scraper to prevent cookie/session collisions and memory leaks.
+- **Automated Antigravity (`agy`) Cron Curation**: A recurring cron job on the host system (`/mnt/docker/franklinflyers/scripts/cron_agy_curate.sh`) runs twice daily (07:30 & 19:30 EDT / 11:30 & 23:30 UTC: `30 11,23 * * *`). It launches `agy -p` non-interactively using the host Antigravity subscription ($0 Gemini token/API cost), checks active store datasets, triggers any needed single-store refreshes, and publishes an updated snapshot enforcing the Top 20 Zero-Filler deal policy. Logs are written to `/mnt/docker/franklinflyers/logs/agy_curate.log`.
 - Manual full runs remain available and republish the combined grocery snapshot.
+- Manual grocery runs (`run_grocery_scrape`) run all grocery scrapers sequentially and republish the snapshot.
 - Manual single runs update only that scraper and can repair a missing public dataset.
 - A dataset whose refresh time has passed gets a short retry fallback rather than a stale permanent schedule.
 
@@ -137,6 +191,16 @@ asyncio.run(run_single_scrape("big_y", trigger_mode="manual_single"))
 PY
 ```
 
+Run a grocery-only batch:
+
+```bash
+docker compose exec -T web python - <<'PY'
+import asyncio
+from app.scheduler import run_grocery_scrape
+asyncio.run(run_grocery_scrape(trigger_mode="manual_grocery"))
+PY
+```
+
 Run a full scrape:
 
 ```bash
@@ -145,6 +209,14 @@ import asyncio
 from app.scheduler import run_full_scrape
 asyncio.run(run_full_scrape(trigger_mode="manual_full"))
 PY
+```
+
+Run host Antigravity automated curation:
+
+```bash
+/mnt/docker/franklinflyers/scripts/cron_agy_curate.sh
+# Tail logs:
+tail -f /mnt/docker/franklinflyers/logs/agy_curate.log
 ```
 
 Run focused host tests:
@@ -163,3 +235,4 @@ Use the project venv at `/tmp/franklinflyers-testenv`; install `requirements.txt
 - After template changes, check the rendered page at desktop and narrow widths; avoid absolute positioning for variable-length event text.
 - If a source changes its HTML or blocks requests, prefer a structured feed/API or direct browser extraction before adding AI.
 - Do not delete old valid data just because a new scrape failed.
+- Verify that rendered public pages and published snapshots contain zero mock listings, dummy text, or placeholder evaluations.

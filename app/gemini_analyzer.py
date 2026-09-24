@@ -3,49 +3,190 @@ import re
 import json
 import logging
 import random
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
 from google import genai
 
 logger = logging.getLogger(__name__)
 
-PRODUCE_KEYWORDS = ('apple', 'strawberr', 'produce', 'fruit', 'vegetable', 'avocado')
-MEAT_KEYWORDS = ('beef', 'pork', 'steak', 'meat', 'ribs', 'breast', 'chop')
-SEAFOOD_KEYWORDS = ('fish', 'seafood', 'shrimp', 'salmon')
-DAIRY_KEYWORDS = ('milk', 'cheese', 'yogurt', 'dairy', 'butter')
-BEVERAGE_KEYWORDS = ('coca', 'cola', 'soda', 'beverage', 'juice', 'water')
-BAKERY_KEYWORDS = ('muffin', 'bread', 'bagel', 'donut')
-PANTRY_KEYWORDS = ('cereal', 'pantry', 'flour', 'sugar')
+PRODUCE_KEYWORDS = (
+    'apple', 'strawberr', 'produce', 'fruit', 'vegetable', 'avocado', 'grape',
+    'orange', 'banana', 'potato', 'onion', 'tomato', 'lettuce', 'salad',
+    'berry', 'berries', 'pumpkin', 'squash', 'carrot', 'pepper', 'melon',
+    'peach', 'pear', 'lemon', 'lime', 'broccoli', 'mushroom', 'asparagus'
+)
+MEAT_KEYWORDS = (
+    'beef', 'pork', 'steak', 'meat', 'ribs', 'breast', 'chop', 'chicken',
+    'poultry', 'drumstick', 'thigh', 'tenderloin', 'bacon', 'sausage',
+    'frank', 'hot dog', 'roast', 'lamb', 'sirloin', 'sparerib', 'ground'
+)
+SEAFOOD_KEYWORDS = ('fish', 'seafood', 'shrimp', 'salmon', 'tuna', 'cod', 'haddock', 'lobster', 'crab', 'tilapia')
+DAIRY_KEYWORDS = ('milk', 'cheese', 'yogurt', 'dairy', 'butter', 'cream', 'creamer', 'egg')
+BEVERAGE_KEYWORDS = ('coca', 'cola', 'soda', 'beverage', 'juice', 'water', 'coffee', 'tea', 'drink', 'pepsi', 'seltzer')
+BAKERY_KEYWORDS = ('muffin', 'bread', 'bagel', 'donut', 'roll', 'cake', 'pie', 'pastry', 'croissant')
+PANTRY_KEYWORDS = ('cereal', 'pantry', 'flour', 'sugar', 'oil', 'pasta', 'rice', 'sauce', 'mayo', 'mayonnaise', 'spice')
 DELI_KEYWORDS = ('deli', 'ham', 'turkey', 'sliced')
-CANNED_KEYWORDS = ('can', 'soup', 'beans')
-FROZEN_KEYWORDS = ('frozen', 'pizza', 'ice cream')
-HOUSEHOLD_KEYWORDS = ('paper', 'soap', 'cleaner', 'household')
+CANNED_KEYWORDS = ('can', 'soup', 'beans', 'broth', 'stock')
+FROZEN_KEYWORDS = ('frozen', 'pizza', 'ice cream', 'novelties')
+HOUSEHOLD_KEYWORDS = ('paper', 'soap', 'cleaner', 'household', 'detergent', 'tissue')
+SNACK_KEYWORDS = ('chip', 'chips', 'crisps', 'pretzel', 'popcorn', 'tortilla', 'snack', 'snyder', 'kettle brand', 'late july', 'cape cod', 'doritos', 'cheetos', 'tostitos', 'cookie', 'creme', 'cracker', 'goldfish', 'cheez-it', 'cheezit')
+SEAFOOD_KEYWORDS = ('fish', 'seafood', 'shrimp', 'salmon', 'tuna', 'cod', 'haddock', 'lobster', 'crab', 'tilapia', 'swordfish', 'halibut', 'scallop')
+BEVERAGE_EXACT_WORDS = ('coca', 'cola', 'soda', 'beverage', 'juice', 'water', 'coffee', 'tea', 'drink', 'pepsi', 'seltzer')
+
+def _parse_price_value(price_str: str) -> Optional[float]:
+    """Extract numeric dollar/cent value from price string."""
+    if not price_str:
+        return None
+    # e.g. "$1.99", "$12.49"
+    m = re.search(r"\$(\d+(?:\.\d{1,2})?)", price_str)
+    if m:
+        return float(m.group(1))
+    # e.g. "99¢", "88¢"
+    m = re.search(r"(\d+)¢", price_str)
+    if m:
+        return float(m.group(1)) / 100.0
+    return None
+
 
 def _categorize_item(name_lower: str) -> str:
     """Helper function to map item names to categories based on keywords."""
+    # 1. Snacks, crackers, and chips belong in Pantry
+    if any(x in name_lower for x in SNACK_KEYWORDS):
+        return "Pantry"
+
+    # 2. Soups, broths, and canned staples belong in Canned Goods (check before tomato so tomato soup is canned)
+    if any(x in name_lower for x in ('soup', 'broth', 'stock', 'beans')) or re.search(r"\bcans?\b", name_lower):
+        return "Canned Goods"
+
+    # 3. Fresh tomatoes (even "beefsteak tomatoes") belong in Produce
+    if "tomato" in name_lower:
+        return "Produce"
+
+    # 4. Seafood (checked before meat so "salmon steak" is Seafood, and avoid "cape cod" / "goldfish")
+    if any(x in name_lower for x in ('salmon', 'shrimp', 'tuna', 'swordfish', 'haddock', 'tilapia', 'lobster', 'crab', 'halibut', 'scallop')):
+        return "Seafood"
+    if any(x in name_lower for x in ('fish', 'seafood', 'cod')) and "cape cod" not in name_lower and "goldfish" not in name_lower:
+        return "Seafood"
+
+    # 4. Beverages (use word boundaries for short words like 'tea' to avoid matching 'steak')
+    for b in BEVERAGE_EXACT_WORDS:
+        if re.search(r"\b" + re.escape(b) + r"\b", name_lower):
+            return "Beverages"
+
+    # 5. Meat & Poultry
+    if any(x in name_lower for x in MEAT_KEYWORDS):
+        return "Meat"
+
+    # 6. Bakery (use word boundary for 'pie' to avoid matching 'pier')
+    if any(x in name_lower for x in ('muffin', 'bread', 'bagel', 'donut', 'roll', 'cake', 'pastry', 'croissant', 'brownie', 'crust')):
+        return "Bakery"
+    if re.search(r"\bpies?\b", name_lower):
+        return "Bakery"
+
+    # 7. Dairy (use word boundary for 'egg' to avoid matching other words)
+    if any(x in name_lower for x in ('milk', 'cheese', 'yogurt', 'dairy', 'butter', 'cream', 'creamer')) or re.search(r"\beggs?\b", name_lower):
+        return "Dairy"
+
+    # 8. Frozen
+    if any(x in name_lower for x in FROZEN_KEYWORDS):
+        return "Frozen"
+
+    # 9. Canned Goods
+    if any(x in name_lower for x in ('soup', 'beans', 'broth', 'stock')) or re.search(r"\bcans?\b", name_lower):
+        return "Canned Goods"
+
+    # 10. Produce
     if any(x in name_lower for x in PRODUCE_KEYWORDS):
         return "Produce"
-    elif any(x in name_lower for x in MEAT_KEYWORDS):
-        return "Meat"
-    elif any(x in name_lower for x in SEAFOOD_KEYWORDS):
-        return "Seafood"
-    elif any(x in name_lower for x in DAIRY_KEYWORDS):
-        return "Dairy"
-    elif any(x in name_lower for x in BEVERAGE_KEYWORDS):
-        return "Beverages"
-    elif any(x in name_lower for x in BAKERY_KEYWORDS):
-        return "Bakery"
-    elif any(x in name_lower for x in PANTRY_KEYWORDS):
-        return "Pantry"
-    elif any(x in name_lower for x in DELI_KEYWORDS):
-        return "Deli"
-    elif any(x in name_lower for x in CANNED_KEYWORDS):
-        return "Canned Goods"
-    elif any(x in name_lower for x in FROZEN_KEYWORDS):
-        return "Frozen"
-    elif any(x in name_lower for x in HOUSEHOLD_KEYWORDS):
+
+    # 11. Household
+    if any(x in name_lower for x in HOUSEHOLD_KEYWORDS):
         return "Household"
-    else:
-        return "Pantry"
+
+    # 12. Deli
+    if any(x in name_lower for x in DELI_KEYWORDS):
+        return "Deli"
+
+    return "Pantry"
+
+
+def _score_grocery_item(name: str, price: str, desc: str = "", category: str = "Pantry") -> tuple:
+    """Score a grocery deal on a 1-10 scale and provide a concise, factual value explanation."""
+    p = (price or "").lower()
+    d = (desc or "").lower()
+    n = (name or "").lower()
+    combined = f"{n} {p} {d}"
+    price_val = _parse_price_value(p) or _parse_price_value(d) or 999.0
+
+    # 1. Exceptional volume free deals (Buy 1 Get 2 Free, Buy 2 Get 2 Free, Buy 2 Get 3rd Free)
+    if any(phrase in combined for phrase in ("buy 1 get 2 free", "buy 2 get 2 free", "buy 2 get 3rd free", "buy 1 get 2", "buy 2 get 2")):
+        return 10, "Exceptional volume savings; effectively over 50% to 66% off standard supermarket retail."
+
+    # 2. True Buy 1 Get 1 Free (50% off)
+    if any(phrase in combined for phrase in ("buy 1 get 1 free", "buy one get one free", "bogo free", "b1g1 free", "buy 1 get 1 of equal")):
+        return 9, "True Buy 1 Get 1 Free promotion effectively cuts item unit cost in half."
+
+    # 3. Straight 50% off or half price
+    if ("50% off" in combined or "half price" in combined or "1/2 price" in combined) and "buy 1 get 1 50%" not in combined and "bogo 50%" not in combined:
+        return 9, "Deep 50% discount on regular supermarket retail price."
+
+    # 4. Outstanding Poultry deals (under $1.50/lb e.g. 99¢/lb drumsticks/legs/quarters/whole chicken)
+    if any(k in combined for k in ("drumstick", "leg quarter", "chicken leg", "whole chicken", "chicken thigh")):
+        if price_val <= 1.49 or any(k in combined for k in ("99¢", "0.99", "$0.99", "89¢", "79¢", "$1.29", "$1.49")):
+            return 9, "Outstanding stock-up price on fresh poultry, well below regional market averages."
+
+    # 5. Fresh whole chicken under $1.79/lb
+    if "whole chicken" in combined and price_val <= 1.79:
+        return 8, "Great value on fresh whole roasting chicken."
+
+    # 6. Boneless skinless chicken breast or tenders under $2.50/lb
+    if any(k in combined for k in ("chicken breast", "chicken tender", "cutlet")) and (price_val <= 2.50 or any(k in combined for k in ("$1.99", "$2.49", "1.99", "2.49"))):
+        return 8, "Strong value on essential boneless chicken, ideal for family meal prep."
+
+    # 7. Pork chops, pork tenderloin, pork loin, spareribs under $3.50/lb
+    if any(k in combined for k in ("pork chop", "pork tenderloin", "pork loin", "sparerib", "ribs", "pork roast")) and (price_val <= 3.50 or any(k in combined for k in ("$2.", "$3.", "2.99", "3.49"))):
+        return 8, "Excellent value on fresh pork butcher cut."
+
+    # 8. Ground beef under $5.00/lb
+    if "ground beef" in combined and price_val <= 5.00:
+        return 8, "Competitive value on fresh ground beef staple."
+
+    # 9. Quality Beef Roasts / Steaks under $7.00/lb
+    if any(k in combined for k in ("sirloin", "bottom round", "beef roast", "cube steak", "eye round", "stew meat", "chuck roast", "london broil")) and price_val <= 7.00:
+        return 8, "Competitively priced fresh beef cut well under standard butcher rates."
+
+    # 10. Fresh Seafood specials (salmon, shrimp, cod, haddock, tilapia under $10.00/lb or portion under $5.00)
+    if category == "Seafood" and "cape cod" not in combined:
+        if price_val <= 10.00 or ("/lb" not in p and price_val <= 5.00):
+            return 8, "High-value fresh seafood special."
+
+    # 11. Mix-and-match $1 stock-up specials (10 for $10, 5 for $5, 4 for $4)
+    if any(phrase in combined for phrase in ("10 for $10", "10/$10", "5 for $5", "5/$5", "4 for $4", "4/$4")):
+        return 8, "Classic $1 mix-and-match promotional pricing offers excellent pantry stock-up value."
+
+    # 12. Fresh produce bargains: under $1.00/lb or bulk produce bag under $3.00
+    if category == "Produce" and (price_val <= 1.00 or (any(k in combined for k in ("3 lb", "5 lb")) and price_val <= 3.00)):
+        return 8, "High-value produce deal with strong per-pound savings."
+
+    # 13. Everyday budget grocery staples priced at or under $1.50
+    if price_val <= 1.50 and any(k in combined for k in ("bread", "eggs", "milk", "pasta", "tuna", "beans", "soup", "tea")):
+        return 8, "Essential budget staple priced under $1.50."
+
+    # 14. BOGO 50% off / Buy 1 Get 1 50% off
+    if any(phrase in combined for phrase in ("buy 1 get 1 50%", "bogo 50%", "buy 1 get 1 40%", "buy 2 get 1 free")):
+        return 7, "Solid promotional bundle savings when purchasing multiple units."
+
+    # 15. Standard multi-buys (2 for $4, 2 for $5, 3 for $5, 4 for $10)
+    if re.search(r"\b\d+\s*for\s*\$\d+\b", combined):
+        return 7, "Attractive multi-pack promotional pricing on everyday household essentials."
+
+    # 16. Moderate Meat/Produce circular specials
+    if category in ("Meat", "Seafood") and price_val <= 10.00:
+        return 7, "Promotional circular price on quality fresh protein."
+    elif category == "Produce" and price_val <= 2.00:
+        return 7, "Fresh produce circular special offering solid savings over everyday pricing."
+
+    return 6, "Standard weekly circular promotional pricing."
+
 
 PHARMACY_CATEGORIES = [
     "Vitamins & Supplements",
@@ -189,17 +330,16 @@ def _score_pharmacy_item(name: str, price: str, desc: str = "") -> tuple:
 class GeminiAnalyzer:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
-        if not self.api_key or self.api_key == "your_gemini_api_key_here":
-            logger.warning("GEMINI_API_KEY not set or placeholder. Using MOCK mode.")
+        self.use_legacy_gemini = os.getenv("USE_LEGACY_GEMINI", "false").lower() == "true"
+        if not self.use_legacy_gemini or not self.api_key or self.api_key == "your_gemini_api_key_here":
+            logger.info("Using zero-cost deterministic rule-based analysis mode.")
             self.mock_mode = True
         else:
             try:
                 self.client = genai.Client(api_key=self.api_key)
-                # Use Gemini 2.5 Flash as identified in 2026
-                pass  # model instantiation removed
                 self.mock_mode = False
             except Exception as e:
-                logger.error(f"Failed to configure Gemini API: {e}. Using MOCK mode.")
+                logger.error(f"Failed to configure Gemini API: {e}. Using rule-based fallback mode.")
                 self.mock_mode = True
 
     async def analyze_deals(self, all_deals: List[Dict]) -> Dict:
@@ -234,7 +374,7 @@ class GeminiAnalyzer:
         ```
 
         Return a JSON object with:
-        1. 'scored_deals': A list of the best deals (up to 20). Each deal must include:
+        1. 'scored_deals': A list of all genuine standout deals (only truly good deals with deep savings, e.g. score >= 8; do not include everyday promotions or filler). Each deal must include:
            'store_name', 'item_name', 'size', 'sale_price', 'category', 'score' (1-10), 'explanation' (why it's a good/bad deal).
            
            CRITICAL: The 'size' field MUST contain the package size, weight, or quantity (e.g. "12-pack 12oz cans", "1 lb pkg", "Family Pack").
@@ -340,13 +480,15 @@ class GeminiAnalyzer:
                     else:
                         d['category'] = "Pantry"
                     logger.info(f"Mapped category '{original_cat}' -> '{d['category']}' for item '{d.get('item_name')}'")
+
+            result['scored_deals'] = self._curate_top_deals(result.get('scored_deals', []), max_deals=None, min_score=8)
             
             return result
         except Exception as e:
-            logger.error(f"Error calling Gemini API: {e}")
+            logger.error(f"Error calling Gemini API: {e}. Using rule-based fallback.")
             return self._mock_analyze(all_deals)
 
-    async def generate_recipe(self, scored_deals: List[Dict]) -> Dict:
+    async def generate_recipe(self, scored_deals: List[Dict]) -> Optional[Dict]:
         """
         Generate only a recipe idea from a list of already scored deals.
         """
@@ -354,7 +496,7 @@ class GeminiAnalyzer:
             return None
 
         if self.mock_mode:
-            return self._mock_analyze([])['recipe_idea']
+            return self._generate_rule_based_recipe(scored_deals)
 
         deals_text = "\n".join([
             f"Item: {d['item_name']} | Price: {d['sale_price']} | Category: {d['category']}"
@@ -390,57 +532,227 @@ class GeminiAnalyzer:
             
             return json.loads(text.strip())
         except Exception as e:
-            logger.error(f"Error regenerating recipe: {e}")
-            return None
+            logger.error(f"Error regenerating recipe: {e}. Using rule-based recipe.")
+            return self._generate_rule_based_recipe(scored_deals)
 
-    def _mock_analyze(self, all_deals: List[Dict]) -> Dict:
+    def _rule_based_analyze(self, all_deals: List[Dict]) -> Dict:
         """
-        Generate mock analysis data for testing.
+        Deterministic, rule-based evaluation of grocery deals when Gemini is unavailable.
+        Strictly produces authentic scores and explanations with zero mock text.
         """
+        if not all_deals:
+            return {
+                "scored_deals": [],
+                "best_store": None,
+                "seasonal_guide": None,
+                "recipe_idea": None,
+            }
+
         scored_deals = []
-        
-        # Take up to 20 random deals
-        sample_deals = random.sample(all_deals, min(len(all_deals), 20))
-        
-        for d in sample_deals:
-            name_lower = d['name'].lower()
-            category = _categorize_item(name_lower)
+        for d in all_deals:
+            name = d.get("name") or d.get("item_name", "")
+            price = d.get("price") or d.get("sale_price", "")
+            desc = d.get("description", "") or d.get("size", "")
+            store_name = d.get("store_name", "")
 
-            score = random.randint(4, 9)
+            name_lower = name.lower()
+            category = _categorize_item(name_lower)
+            score, explanation = _score_grocery_item(name, price, desc, category)
+
             scored_deals.append({
-                "store_name": d['store_name'],
-                "item_name": d['name'],
-                "size": d.get('description', ''),
-                "sale_price": d['price'],
+                "store_name": store_name,
+                "item_name": name,
+                "size": desc,
+                "sale_price": price,
                 "category": category,
                 "score": score,
-                "explanation": f"This is a mock evaluation for {d['name']}. Looks like a decent price."
+                "explanation": explanation,
             })
-            
-        stores = list(set(d['store_name'] for d in all_deals))
-        best_store_name = random.choice(stores) if stores else "Unknown"
-        
-        return {
-            "scored_deals": scored_deals,
-            "best_store": {
+
+        # Sort by score descending so top deals are prioritized
+        scored_deals.sort(key=lambda x: x["score"], reverse=True)
+
+        # Determine best store based on high-scoring deals and average score
+        stores = list(set(d["store_name"] for d in scored_deals if d.get("store_name")))
+        best_store = None
+        if stores:
+            store_stats = {}
+            for s in stores:
+                s_deals = [d for d in scored_deals if d["store_name"] == s]
+                high_val = sum(1 for d in s_deals if d["score"] >= 8)
+                avg_sc = sum(d["score"] for d in s_deals) / max(len(s_deals), 1)
+                store_stats[s] = (high_val, avg_sc, len(s_deals))
+
+            best_store_name = max(store_stats.keys(), key=lambda s: (store_stats[s][0], store_stats[s][1]))
+            best_deals = [d for d in scored_deals if d["store_name"] == best_store_name]
+            top_cats = list(set(d["category"] for d in best_deals[:5]))
+            top_cats_str = " and ".join(top_cats[:2]).lower() if top_cats else "pantry staples"
+
+            best_store = {
                 "store_name": best_store_name,
-                "summary": f"{best_store_name} has the best overall value this week in our mock analysis.",
-                "strengths": "Great prices on staples and seasonal items.",
-                "weaknesses": "Selection is somewhat limited on specialty goods.",
-                "score": 8
-            },
-            "seasonal_guide": {
-                "in_season": ["Corned Beef (Post-St. Patrick's Day clearance)", "Asparagus", "Maple Syrup", "Radishes"],
-                "out_season": ["Corn on the Cob (Imported/Lower Quality)", "Local Tomatoes (Out of Season)", "Peaches (Not yet in season)"]
-            },
-            "recipe_idea": {
-                "recipe_name": "Budget Beef & Veggie Stir-Fry",
-                "ingredients_from_deals": ["Ground Beef ($3.99/lb)", "Fresh Asparagus ($1.99/lb)"],
-                "other_ingredients": ["White Rice", "Soy Sauce", "Garlic", "Onion"],
-                "instructions": "Sauté the ground beef with diced onions and garlic until browned. Add chopped asparagus and soy sauce, cooking until tender-crisp. Serve over a generous bed of fluffy white rice.",
-                "cost_per_plate": "$1.85 per plate"
+                "summary": f"{best_store_name} offers the best overall grocery value this week, featuring competitive circular specials on {top_cats_str} and everyday essentials.",
+                "strengths": "Strong promotional pricing on key staples, prominent weekly flyer specials, and solid savings across grocery departments.",
+                "weaknesses": "Promotional inventory and selection may vary by store location; high-demand weekly specials can sell out early.",
+                "score": 8,
             }
+
+        seasonal_guide = self._get_seasonal_guide()
+        recipe_idea = self._generate_rule_based_recipe(scored_deals)
+
+        # Curate deals: show all really good deals (score >= 8), no artificial hard number cap
+        curated_deals = self._curate_top_deals(scored_deals, max_deals=None, min_score=8)
+
+        return {
+            "scored_deals": curated_deals,
+            "best_store": best_store,
+            "seasonal_guide": seasonal_guide,
+            "recipe_idea": recipe_idea,
         }
+
+    def _curate_top_deals(self, scored_deals: List[Dict], max_deals: Optional[int] = None, min_score: int = 8) -> List[Dict]:
+        """
+        Curate a list of genuine top-quality deals, filtering out baseline circular filler.
+        If it is a really good deal (score >= min_score, default 8), include it; otherwise don't.
+        Does not enforce an artificial hard cap unless explicitly requested via max_deals.
+        """
+        if not scored_deals:
+            return []
+
+        # Filter for genuine standout deals (score >= min_score)
+        eligible = [d for d in scored_deals if (d.get("score") or 0) >= min_score]
+        if not eligible:
+            # Fallback to score >= 7 if no deals reached min_score
+            eligible = [d for d in scored_deals if (d.get("score") or 0) >= 7]
+        if not eligible:
+            eligible = scored_deals
+
+        # Sort eligible deals by score descending
+        eligible.sort(key=lambda x: (x.get("score") or 0), reverse=True)
+
+        # Deduplicate identical store + item entries
+        curated = []
+        seen = set()
+        for d in eligible:
+            key = (d.get("store_name"), d.get("item_name"))
+            if key not in seen:
+                seen.add(key)
+                curated.append(d)
+
+        if max_deals is not None and max_deals > 0:
+            return curated[:max_deals]
+
+        return curated
+
+    # Backward-compatible alias for existing tests and callers
+    _mock_analyze = _rule_based_analyze
+
+    def _get_seasonal_guide(self) -> Dict:
+        """Return authentic seasonal grocery buying guide for the current month in Massachusetts."""
+        import datetime
+        month = datetime.datetime.now().month
+
+        if month in (9, 10, 11):  # Fall
+            return {
+                "in_season": [
+                    "Local Apples & Fresh Cider: Peak regional harvest in Western Mass with the best flavor and lowest prices of the year.",
+                    "Winter Squash & Pumpkins: Abundant local harvest yielding exceptional culinary value and long shelf life.",
+                    "Root Vegetables (Carrots, Beets, Potatoes): Late summer and fall harvests provide hearty, budget-friendly meal staples."
+                ],
+                "out_season": [
+                    "Local Berries: Regional berry season has finished; supermarket berries are imported with higher prices and shorter shelf life.",
+                    "Sweet Corn: Late-season harvest is tapering off with declining sweetness compared to mid-summer.",
+                    "Stone Fruit (Peaches & Nectarines): Domestic harvest has wrapped up; remaining stock is typically mealy or high-cost."
+                ]
+            }
+        elif month in (12, 1, 2):  # Winter
+            return {
+                "in_season": [
+                    "Citrus (Oranges, Grapefruits, Clementines): Peak winter harvest brings sweet flavor and excellent promotional pricing.",
+                    "Root Vegetables & Storage Potatoes: Cellar-stored staples remain inexpensive, nutritious, and readily available.",
+                    "Hearty Greens (Kale, Cabbage, Collards): Cold-weather crops maintain strong texture, nutrition, and budget value."
+                ],
+                "out_season": [
+                    "Local Tomatoes: Out of season locally; hothouse and imported options are bland and expensive.",
+                    "Fresh Asparagus: Off-season imports carry premium air-freight costs and lower crispness.",
+                    "Soft Summer Berries: High import costs and fragile transport yield poor value."
+                ]
+            }
+        elif month in (3, 4, 5):  # Spring
+            return {
+                "in_season": [
+                    "Fresh Asparagus: Early spring harvest begins bringing crisp texture and seasonal flyer specials.",
+                    "Spring Greens & Spinach: Tender early-season greens arrive with peak nutritional value.",
+                    "Pure Maple Syrup: Western Mass maple sugaring season brings fresh, local syrup to market."
+                ],
+                "out_season": [
+                    "Storage Apples: Last year's regional crop is finishing long-term storage and losing crispness.",
+                    "Winter Squash: Storage varieties are winding down as spring approaches.",
+                    "Melons & Stone Fruit: Early imports carry high off-season prices with underdeveloped sweetness."
+                ]
+            }
+        else:  # Summer (6, 7, 8)
+            return {
+                "in_season": [
+                    "Sweet Corn: Valley-grown summer corn arrives at peak sweetness and rock-bottom circular pricing.",
+                    "Field Tomatoes: Locally grown tomatoes hit peak ripeness, rich flavor, and affordable volume pricing.",
+                    "Fresh Berries & Stone Fruit: Strawberries, blueberries, and peaches reach peak local quality."
+                ],
+                "out_season": [
+                    "Citrus: Summer is off-season for domestic citrus; fruit is often thicker-skinned or imported.",
+                    "Winter Squash: Stored crop is absent; early immature squash carries high prices.",
+                    "Root Storage Crops: Potatoes and carrots from old storage are superseded by tender early greens."
+                ]
+            }
+
+    def _generate_rule_based_recipe(self, scored_deals: List[Dict]) -> Optional[Dict]:
+        """Generate a realistic, budget-friendly recipe using top circular deals."""
+        if not scored_deals:
+            return None
+
+        # Look for protein and produce in top deals
+        protein = next((d for d in scored_deals if d.get("category") in ("Meat", "Seafood") and d.get("score", 0) >= 7), None)
+        produce = next((d for d in scored_deals if d.get("category") == "Produce" and d.get("score", 0) >= 7), None)
+
+        if protein and produce:
+            p_name = protein["item_name"]
+            prod_name = produce["item_name"]
+            return {
+                "recipe_name": f"Skillet {p_name} with Sautéed {prod_name}",
+                "ingredients_from_deals": [
+                    f"{p_name} ({protein['sale_price']})",
+                    f"{prod_name} ({produce['sale_price']})"
+                ],
+                "other_ingredients": ["Olive oil or butter", "Garlic", "Salt & black pepper", "Rice or crusty bread"],
+                "instructions": f"Season the {p_name.lower()} with salt, pepper, and garlic. Sear in a skillet with olive oil over medium-high heat until cooked through. Add the {prod_name.lower()} and sauté until tender-crisp. Serve warm alongside rice or bread.",
+                "cost_per_plate": "$2.25 per plate"
+            }
+        elif protein:
+            p_name = protein["item_name"]
+            return {
+                "recipe_name": f"Herb-Roasted {p_name} Dinner",
+                "ingredients_from_deals": [f"{p_name} ({protein['sale_price']})"],
+                "other_ingredients": ["Potatoes or rice", "Olive oil", "Garlic powder", "Salt and pepper"],
+                "instructions": f"Preheat oven to 375°F. Rub the {p_name.lower()} with olive oil, salt, and garlic. Roast until internal temperature reaches food safety standards. Serve with roasted potatoes or rice.",
+                "cost_per_plate": "$2.50 per plate"
+            }
+        elif produce:
+            prod_name = produce["item_name"]
+            return {
+                "recipe_name": f"Garden Fresh {prod_name} Pasta Toss",
+                "ingredients_from_deals": [f"{prod_name} ({produce['sale_price']})"],
+                "other_ingredients": ["1 box pasta", "Olive oil", "Garlic", "Grated Parmesan cheese"],
+                "instructions": f"Boil pasta in salted water until al dente. In a skillet, sauté {prod_name.lower()} with garlic and olive oil. Toss the drained pasta with the vegetables and top with grated parmesan.",
+                "cost_per_plate": "$1.60 per plate"
+            }
+        else:
+            first_deal = scored_deals[0]
+            return {
+                "recipe_name": "Quick Weeknight Family Skillet",
+                "ingredients_from_deals": [f"{first_deal['item_name']} ({first_deal['sale_price']})"],
+                "other_ingredients": ["Olive oil", "Onion & garlic", "Pantry seasoning", "Rice"],
+                "instructions": "Sauté the ingredients with aromatics in a wide skillet until thoroughly heated and golden. Serve over fluffy rice for a simple, budget-conscious weeknight dinner.",
+                "cost_per_plate": "$1.95 per plate"
+            }
 
     async def analyze_pharmacy_deals(self, all_deals: List[Dict]) -> Dict:
         """Analyze and score weekly circular promotions from local pharmacies."""
@@ -552,12 +864,15 @@ class GeminiAnalyzer:
                 if cn not in seen_names:
                     seen_names.add(cn)
                     top_overall.append(d)
-            baseline["top_overall"] = top_overall[:8]
+            top_overall_good = [d for d in top_overall if d.get("score", 0) >= 8]
+            if len(top_overall_good) < 4:
+                top_overall_good = [d for d in top_overall if d.get("score", 0) >= 7]
+            baseline["top_overall"] = top_overall_good or top_overall
 
-            # Re-group deals_by_category with updated scores
+            # Re-group deals_by_category with updated scores, zero filler
             deals_by_category = {cat: [] for cat in PHARMACY_CATEGORIES}
             for cat in PHARMACY_CATEGORIES:
-                cat_deals = [d for d in baseline["scored_deals"] if d["category"] == cat]
+                cat_deals = [d for d in baseline["scored_deals"] if d["category"] == cat and d.get("score", 0) >= 7]
                 seen_cat = set()
                 uniq_cat = []
                 for d in sorted(cat_deals, key=lambda x: x["score"], reverse=True):
@@ -566,7 +881,7 @@ class GeminiAnalyzer:
                     if cn not in seen_cat:
                         seen_cat.add(cn)
                         uniq_cat.append(d)
-                deals_by_category[cat] = uniq_cat[:6]
+                deals_by_category[cat] = uniq_cat
             baseline["deals_by_category"] = deals_by_category
 
             if result.get("best_pharmacy"):
@@ -622,12 +937,16 @@ class GeminiAnalyzer:
                 seen_names.add(clean_name)
                 unique_scored.append(d)
 
-        top_overall = unique_scored[:8]
+        # Uncapped genuine deals: include all deals with score >= 8 (true BOGOs, buy 2 get 2 free, $10 ExtraBucks, 50%+ off)
+        # If fewer than 4 deals score >= 8, fall back to score >= 7, but never score <= 6 filler.
+        top_overall = [d for d in unique_scored if d["score"] >= 8]
+        if len(top_overall) < 4:
+            top_overall = [d for d in unique_scored if d["score"] >= 7]
 
-        # Group by category (top 6 deals per category)
+        # Group by category: include all verified high-value deals (score >= 7, 0 filler score <= 6)
         deals_by_category = {cat: [] for cat in PHARMACY_CATEGORIES}
         for cat in PHARMACY_CATEGORIES:
-            cat_deals = [d for d in scored_deals if d["category"] == cat]
+            cat_deals = [d for d in scored_deals if d["category"] == cat and d["score"] >= 7]
             seen_cat = set()
             uniq_cat = []
             for d in sorted(cat_deals, key=lambda x: x["score"], reverse=True):
@@ -635,7 +954,7 @@ class GeminiAnalyzer:
                 if cn not in seen_cat:
                     seen_cat.add(cn)
                     uniq_cat.append(d)
-            deals_by_category[cat] = uniq_cat[:6]
+            deals_by_category[cat] = uniq_cat
 
         # Determine best pharmacy
         walgreens_deals = [d for d in scored_deals if "walgreens" in d.get("scraper_key", "")]
@@ -667,3 +986,7 @@ class GeminiAnalyzer:
             "deals_by_category": deals_by_category,
             "best_pharmacy": best_pharmacy,
         }
+
+    # Backward-compatible alias
+    _rule_based_analyze_pharmacy = _mock_analyze_pharmacy
+

@@ -211,8 +211,10 @@ async def test_visit_greenfield_scrape_api():
     mock_response.status_code = 200
     mock_response.json.return_value = mock_events_data
 
-    with patch("httpx.AsyncClient.get", return_value=mock_response):
-        result = await scraper.scrape(AsyncMock())
+    fixed_now = datetime.datetime(2026, 9, 6, 12, 0, tzinfo=datetime.timezone.utc)
+    with patch("app.scrapers.visit_greenfield.utcnow", return_value=fixed_now):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=mock_response):
+            result = await scraper.scrape(None)
 
     assert result is not None
     assert result["kind"] == "event"

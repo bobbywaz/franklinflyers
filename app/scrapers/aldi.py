@@ -130,6 +130,9 @@ class AldiScraper(BaseScraper):
         await flyer_canvas.wait_for(state="visible", timeout=30000)
 
     async def _analyze_screenshot_with_gemini(self, image_path: str) -> Optional[Dict]:
+        if os.getenv("USE_LEGACY_GEMINI", "false").lower() != "true":
+            logger.info("Legacy Gemini API is disabled (USE_LEGACY_GEMINI != 'true')")
+            return None
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             logger.error("GEMINI_API_KEY not set")
