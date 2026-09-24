@@ -12,6 +12,25 @@ Read this before changing the project. Keep this file updated when architecture,
 - Public pages: `/`, `/dispensaries`, `/events`, `/movies`, `/pharmacies`.
 - Admin: `/admin`, protected by session authentication.
 
+## Rules Hierarchy for Autonomous Agents (Jules / AGY)
+
+### ALWAYS
+- **Run tests before and after making changes**: Ensure `pytest -q` passes with all 57 tests green.
+- **Zero-Cost Local Curation**: Keep deal evaluation and scoring deterministic ($0 external API cost).
+- **Strict Quality Filtering**: Only feature standout deals (score $\ge$ 8, e.g. $\ge$ 20% discount, BOGOs, $10 ExtraBucks); exclude all score $\le$ 6 promotional filler.
+- **Uncapped Real Deals**: If 15 deals qualify, show 15; if 40 qualify, show 40. Never artificially cap genuine deals.
+- **Preserve Documentation & Comments**: Maintain existing docstrings and operational comments.
+
+### NEVER
+- **NEVER Call Paid External AI**: Do not invoke Google GenAI API directly or set `USE_LEGACY_GEMINI=true`. Keep legacy Gemini safely archived in `app/legacy_gemini.py`.
+- **NEVER Render Mock / Placeholder Copy**: Never write `"mock evaluation"`, `"placeholder"`, or dummy items into production tables or UI templates.
+- **NEVER Commit Sensitive / Database Files**: Never commit `.env`, `*.db`, `*.db-wal`, `*.db-shm`, or `logs/`.
+- **NEVER Re-introduce Hard Quotas**: Never slice top deals with arbitrary limits like `[:6]` or `[:20]`.
+
+### ASK FIRST
+- Modifying database table schemas (`app/models.py`).
+- Introducing new external third-party network dependencies.
+
 ## Architecture
 
 - `app/manager.py` owns the scraper registry and Playwright execution.
@@ -219,14 +238,19 @@ Run host Antigravity automated curation:
 tail -f /mnt/docker/franklinflyers/logs/agy_curate.log
 ```
 
-Run focused host tests:
+Run automated test suite:
 
 ```bash
-/tmp/franklinflyers-testenv/bin/python -m pytest -q tests/test_aldi.py
-/tmp/franklinflyers-testenv/bin/python -m pytest -q tests/test_big_y.py
+# Run all 57 tests:
+pytest -q
+
+# Run single test module:
+pytest -q tests/test_aldi.py
+pytest -q tests/test_dispensaries.py
+pytest -q tests/test_pharmacies.py
 ```
 
-Use the project venv at `/tmp/franklinflyers-testenv`; install `requirements.txt`, `pytest`, and `pytest-asyncio` there. Keep permanent tests in `tests/`, not in root-level probe scripts.
+Note: In host environment, use `/tmp/franklinflyers-testenv/bin/python -m pytest` or `pytest` after `pip install -r requirements.txt`. In CI / Jules environments, run `pytest -q` directly. Keep all permanent tests in `tests/`.
 
 ## Operational Checks
 

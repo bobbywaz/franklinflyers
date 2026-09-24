@@ -9,3 +9,5 @@ python-dotenv
 httpx
 python-multipart
 itsdangerous
+pytest
+pytest-asyncio
