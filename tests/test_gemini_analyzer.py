@@ -178,3 +178,100 @@ def test_rule_based_analyze_curates_top_deals_and_filters_filler():
     # Explicit cap is still respected if requested
     capped = analyzer._curate_top_deals(result["scored_deals"], max_deals=10)
     assert len(capped) == 10
+
+@pytest.mark.asyncio
+async def test_generate_recipe_empty_list():
+    analyzer = GeminiAnalyzer()
+    result = await analyzer.generate_recipe([])
+    assert result is None
+
+@pytest.mark.asyncio
+async def test_generate_recipe_mock_mode():
+    analyzer = GeminiAnalyzer()
+    analyzer.mock_mode = True
+
+    # Mock the _generate_rule_based_recipe method
+    with patch.object(analyzer, '_generate_rule_based_recipe', return_value={"recipe_name": "Mock Recipe"}) as mock_method:
+        deals = [{"item_name": "Chicken", "sale_price": "1.99", "category": "Meat"}]
+        result = await analyzer.generate_recipe(deals)
+
+        mock_method.assert_called_once_with(deals)
+        assert result == {"recipe_name": "Mock Recipe"}
+
+@pytest.mark.asyncio
+async def test_generate_recipe_normal_mode():
+    analyzer = GeminiAnalyzer()
+    analyzer.mock_mode = False
+
+    # Mock the Gemini client
+    mock_client = MagicMock()
+    analyzer.client = mock_client
+
+    # Setup the mock response
+    mock_response = MagicMock()
+    mock_response_json = {
+        "recipe_name": "Test Recipe",
+        "ingredients_from_deals": ["Chicken ($1.99)"],
+        "other_ingredients": ["Rice"],
+        "instructions": "Cook it.",
+        "cost_per_plate": "$2.00 per plate"
+    }
+    mock_response.text = json.dumps(mock_response_json)
+    mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+
+    deals = [
+        {"item_name": "Chicken", "sale_price": "1.99", "category": "Meat"}
+    ]
+
+    result = await analyzer.generate_recipe(deals)
+
+    # Verify the model was called
+    mock_client.aio.models.generate_content.assert_called_once()
+    assert result == mock_response_json
+
+@pytest.mark.asyncio
+async def test_generate_recipe_api_error():
+    analyzer = GeminiAnalyzer()
+    analyzer.mock_mode = False
+
+    # Mock the Gemini client to raise an exception
+    mock_client = MagicMock()
+    mock_client.aio.models.generate_content = AsyncMock(side_effect=Exception("API error"))
+    analyzer.client = mock_client
+
+    # Mock fallback method
+    with patch.object(analyzer, '_generate_rule_based_recipe', return_value={"recipe_name": "Fallback Recipe"}) as mock_method:
+        deals = [{"item_name": "Chicken", "sale_price": "1.99", "category": "Meat"}]
+        result = await analyzer.generate_recipe(deals)
+
+        # Verify it caught the error and used fallback
+        mock_method.assert_called_once_with(deals)
+        assert result == {"recipe_name": "Fallback Recipe"}
+
+@pytest.mark.asyncio
+async def test_generate_recipe_markdown_parsing():
+    analyzer = GeminiAnalyzer()
+    analyzer.mock_mode = False
+
+    # Mock the Gemini client
+    mock_client = MagicMock()
+    analyzer.client = mock_client
+
+    # Setup the mock response with markdown formatting
+    mock_response = MagicMock()
+    json_data = {
+        "recipe_name": "Markdown Recipe",
+        "ingredients_from_deals": ["Chicken ($1.99)"],
+        "other_ingredients": ["Rice"],
+        "instructions": "Cook it.",
+        "cost_per_plate": "$2.00 per plate"
+    }
+    mock_response.text = f"```json\n{json.dumps(json_data)}\n```"
+    mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+
+    deals = [{"item_name": "Chicken", "sale_price": "1.99", "category": "Meat"}]
+
+    result = await analyzer.generate_recipe(deals)
+
+    # Verify the markdown was stripped and JSON parsed correctly
+    assert result["recipe_name"] == "Markdown Recipe"
