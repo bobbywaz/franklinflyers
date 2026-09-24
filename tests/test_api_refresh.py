@@ -19,8 +19,9 @@ def test_api_refresh_authorized():
         yield MockSession()
 
     # We should preserve original dependency_overrides just in case
-    # Actually setting it directly might be better
-    # Or just pop get_db
+    # If get_db was already overridden, we save it.
+    original_get_db_override = app.dependency_overrides.get(get_db, None)
+
     app.dependency_overrides[get_db] = mock_get_db
 
     try:
@@ -36,7 +37,7 @@ def test_api_refresh_authorized():
                 from app.main import run_full_scrape
                 mock_add_task.assert_called_with(run_full_scrape, trigger_mode="manual_full")
     finally:
-        # Clear only the specific override we added, instead of clearing all overrides
-        # Setting app.dependency_overrides = {} removes overrides for subsequent tests
-        if get_db in app.dependency_overrides:
+        if original_get_db_override is not None:
+            app.dependency_overrides[get_db] = original_get_db_override
+        elif get_db in app.dependency_overrides:
             del app.dependency_overrides[get_db]
