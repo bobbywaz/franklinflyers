@@ -1,0 +1,4 @@
+## 2024-05-15 - Secure Hash Detection During Migrations
+**Vulnerability:** Flawed legacy password migration logic.
+**Learning:** Using a loose substring check (e.g., `if "$" in password_string`) to distinguish between a plaintext password and a hashed password during an on-the-fly migration is extremely dangerous. If a user's plaintext password naturally contains the delimiter character (like `$`), the system incorrectly treats it as a hash, breaks it apart, and permanently fails to verify the password, locking the user out.
+**Prevention:** Always rely on strict structural validation for hash detection (e.g., checking exact expected length and delimiter positions: `len(pwd) == 97 and pwd[32] == "$"`), or store an explicit boolean/version flag in the database alongside the credential to indicate its hashing scheme.
