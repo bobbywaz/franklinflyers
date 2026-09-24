@@ -185,8 +185,19 @@ def test_get_active_pharmacy_datasets():
 
 def test_pharmacies_route_html():
     """Verify /pharmacies endpoint renders 200 OK with expected markup and navigation."""
-    client = TestClient(app)
-    response = client.get("/pharmacies")
+    from unittest.mock import patch, MagicMock
+    with patch("app.main.get_active_pharmacy_datasets") as mock_get:
+        mock_ds = MagicMock()
+        mock_ds.store_name = "Walgreens"
+        mock_ds.scraper_key = "walgreens_greenfield"
+        mock_deal = MagicMock()
+        mock_deal.item_name = "Vitamin C"
+        mock_deal.description = "BOGO"
+        mock_deal.sale_price = "$10"
+        mock_ds.deals = [mock_deal]
+        mock_get.return_value = [mock_ds]
+        client = TestClient(app)
+        response = client.get("/pharmacies")
     assert response.status_code == 200
     html = response.text
     assert "Franklin County Pharmacies" in html
@@ -298,8 +309,19 @@ async def test_analyze_pharmacy_deals_mock():
 
 def test_pharmacies_route_ai_sections():
     """Verify /pharmacies renders AI top deals, department sections, and best store value summary."""
-    client = TestClient(app)
-    response = client.get("/pharmacies")
+    from unittest.mock import patch, MagicMock
+    with patch("app.main.get_active_pharmacy_datasets") as mock_get:
+        mock_ds = MagicMock()
+        mock_ds.store_name = "Walgreens"
+        mock_ds.scraper_key = "walgreens_greenfield"
+        mock_deal = MagicMock()
+        mock_deal.item_name = "Vitamin C"
+        mock_deal.description = "BOGO"
+        mock_deal.sale_price = "$10"
+        mock_ds.deals = [mock_deal]
+        mock_get.return_value = [mock_ds]
+        client = TestClient(app)
+        response = client.get("/pharmacies")
     assert response.status_code == 200
     html = response.text
 
