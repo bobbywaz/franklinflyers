@@ -1,7 +1,16 @@
 import pytest
+import datetime
+from unittest.mock import AsyncMock, MagicMock
 from starlette.testclient import TestClient
 
 from app.database import Base, SessionLocal, engine
+from app.scrapers.patriot_care import PatriotCareScraper
+from app.scrapers.rise_dispensary import RiseDispensaryScraper
+from app.scrapers.leaf_joy import LeafJoyScraper
+from app.scrapers.heirloom_collection import HeirloomCollectionScraper
+from app.scrapers.pharmacy_257 import Pharmacy257Scraper
+from app.scrapers.smokey_leaf import SmokeyLeafScraper
+from app.scrapers.cheech_and_chong import CheechAndChongScraper
 from app.main import app, get_discount_percentage, score_weed_deal, categorize_weed
 from app.models import StoreDataset, StoreDeal
 from app.store_utils import utcnow
@@ -52,6 +61,40 @@ def test_categorize_weed():
 
 def test_dispensaries_route_uncapped_and_zero_filler():
     """Verify /dispensaries renders genuine deals uncapped without score <= 6 filler items."""
+    db = SessionLocal()
+
+    # Add a mock dataset and some deals
+    dataset = StoreDataset(
+        scraper_key="patriot_care",
+        store_name="Patriot Care",
+        kind="dispensary",
+        items_scraped_count=2,
+        status="success",
+        trigger_mode="manual_single",
+        flyer_start_date=utcnow().date(),
+        flyer_end_date=utcnow().date() + datetime.timedelta(days=6),
+        expires_at=utcnow() + datetime.timedelta(days=6)
+    )
+    db.add(dataset)
+    db.commit()
+    db.refresh(dataset)
+
+    good_deal = StoreDeal(
+        dataset_id=dataset.id,
+        item_name="Amazing BOGO Weed",
+        sale_price="$25.00",
+        description="Buy 1 Get 1 Free"
+    )
+    filler_deal = StoreDeal(
+        dataset_id=dataset.id,
+        item_name="Overpriced Pre-Roll",
+        sale_price="$15.00",
+        description="Just a regular pre-roll"
+    )
+    db.add_all([good_deal, filler_deal])
+    db.commit()
+    db.close()
+
     client = TestClient(app)
     response = client.get("/dispensaries")
     assert response.status_code == 200
@@ -64,3 +107,44 @@ def test_dispensaries_route_uncapped_and_zero_filler():
 
     # Verify score 1/10 filler items are excluded from top deals
     assert "Score: 1/10" not in html
+    assert "Amazing BOGO Weed" in html
+    assert "Overpriced Pre-Roll" not in html
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scraper_class", [
+    PatriotCareScraper,
+    RiseDispensaryScraper,
+    LeafJoyScraper,
+    HeirloomCollectionScraper,
+    Pharmacy257Scraper,
+    SmokeyLeafScraper,
+    CheechAndChongScraper
+])
+async def test_dispensary_scrapers_fallback(scraper_class):
+    """Verify dispensary scrapers return structured deals gracefully on timeout/error."""
+    scraper = scraper_class()
+
+    # Mock page.goto to raise an exception simulating timeout
+    mock_page = AsyncMock()
+    mock_page.goto.side_effect = Exception("Simulated network timeout")
+
+    result = await scraper.scrape(mock_page)
+
+    # Assert expected structure
+    assert isinstance(result, dict)
+    assert result.get("kind") == "dispensary"
+    assert result.get("scraper_key") == scraper.scraper_key
+    assert "flyer_start_date" in result
+    assert "flyer_end_date" in result
+
+    # Verify deals
+    deals = result.get("deals", [])
+    assert len(deals) > 0
+    assert result.get("items_scraped_count", 0) == len(deals)
+
+    for deal in deals:
+        assert isinstance(deal.get("price"), str)
+        assert len(deal.get("price")) > 0
+        assert isinstance(deal.get("name"), str)
+        assert len(deal.get("name")) > 0
