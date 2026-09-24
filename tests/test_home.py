@@ -15,13 +15,10 @@ def test_home_store_filter_checkboxes():
     # Verify the empty state is present
     assert 'No flyer data analyzed yet' in html
 
-    # The filter JS and empty state placeholders are still rendered
-    assert 'id="top-overall-empty"' in html
-    assert 'id="deals-by-category-empty"' in html
-
-    # Empty state placeholders
-    assert 'id="top-overall-empty"' in html
-    assert 'id="deals-by-category-empty"' in html
+    # The filter JS is still rendered, but the empty state placeholders are within
+    # the has_data block, so they will not be present.
+    assert 'id="top-overall-empty"' not in html
+    assert 'id="deals-by-category-empty"' not in html
 
     # Filter script presence and persistence
     assert "ff_grocery_store_filter" in html
