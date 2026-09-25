@@ -1,0 +1,4 @@
+## 2025-09-25 - Exact Structural Checks for Password Migration
+**Vulnerability:** Weak structural checks (like checking if "$" is in the string) when migrating from plaintext passwords to hashes can lead to false positives (if a user's plaintext password legitimately contains "$"), potentially locking them out or causing errors.
+**Learning:** When migrating legacy plaintext systems to hashed passwords, we must use an exact structural check (`len(string) == 97 and string[32] == "$"` for our PBKDF2 structure) to definitively identify the hash format without risking collisions with valid user input.
+**Prevention:** Always implement exact format validation (length, specific delimiter indices, character sets) rather than simple substring inclusion when distinguishing between legacy and new security formats. Additionally, always use `secrets.compare_digest` for the actual comparison to prevent timing attacks.
