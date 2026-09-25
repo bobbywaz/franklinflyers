@@ -1,0 +1,3 @@
+## 2025-01-24 - Accessibility gaps in custom styled templates
+**Learning:** Decorative icons placed next to inputs using absolute positioning (e.g., search magnifying glass) without `aria-hidden="true"` can create visual clutter for screen readers. Also, filter pills implemented with hidden checkboxes and custom text elements need explicit `aria-label` tags on the input itself if the `<label>` text doesn't contain the accessible name.
+**Action:** When auditing custom-styled templates (like Tailwind), always ensure decorative sibling elements are hidden and input elements explicitly have accessible names if their linked label only wraps an icon or is visually hidden.
