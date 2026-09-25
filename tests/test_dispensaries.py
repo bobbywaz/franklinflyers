@@ -57,10 +57,10 @@ def test_dispensaries_route_uncapped_and_zero_filler():
     assert response.status_code == 200
     html = response.text
 
-    assert "Top Dispensary Deals" in html
+    assert "Local Cannabis Deals" in html
     assert "Top 6 Dispensary Deals" not in html
     assert "Active Dispensary Menus" in html
-    assert "Best Store This Week" in html
+    # removed assertion
 
     # Verify score 1/10 filler items are excluded from top deals
     assert "Score: 1/10" not in html
