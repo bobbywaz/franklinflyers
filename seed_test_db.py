@@ -54,6 +54,8 @@ def seed_for_tests(db):
         expires_at=now + datetime.timedelta(days=7),
     )
     db.add(pharmacy_ds)
+    pharmacy_ds2 = StoreDataset(scraper_key="walgreens_greenfield", store_name="Walgreens", kind="pharmacy", trigger_mode="manual", status="success", flyer_start_date=now.date(), flyer_end_date=(now + datetime.timedelta(days=7)).date(), started_at=now, finished_at=now, expires_at=now + datetime.timedelta(days=7))
+    db.add(pharmacy_ds2)
     db.flush()
     db.add(StoreDeal(dataset_id=pharmacy_ds.id, item_name="Pills", sale_price="BOGO", description="Buy 1 Get 1"))
 
