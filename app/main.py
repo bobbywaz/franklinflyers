@@ -9,13 +9,13 @@ from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from starlette.middleware.sessions import SessionMiddleware
 
 from .database import SessionLocal, get_db, init_db
 from .gemini_analyzer import GeminiAnalyzer, PHARMACY_CATEGORIES
 from .manager import ScraperManager
-from .models import Configuration, Run, StoreDataset
+from .models import Configuration, Run, StoreDataset, PublishedSnapshotStore
 from .scheduler import run_full_scrape, run_grocery_scrape, run_single_scrape, start_scheduler
 from .store_utils import (
     STATUS_SUCCESS,
@@ -82,7 +82,15 @@ def _latest_success_by_key(db: Session, scraper_key: str) -> Optional[StoreDatas
 
 
 def _build_home_context(request: Request, db: Session):
-    latest_run = db.query(Run).filter(Run.is_ready == True).order_by(Run.run_date.desc()).first()
+    # Optimize database queries by eagerly loading related data in a single query
+    # rather than lazy loading N+1 queries when accessing best_store and deals.
+    latest_run = (
+        db.query(Run)
+        .options(joinedload(Run.best_store), joinedload(Run.deals))
+        .filter(Run.is_ready == True)
+        .order_by(Run.run_date.desc())
+        .first()
+    )
     active_grocery_datasets = get_active_grocery_datasets(db)
     active_store_names = {dataset.store_name for dataset in active_grocery_datasets}
 
@@ -139,7 +147,18 @@ def _build_home_context(request: Request, db: Session):
 
 def _build_admin_context(request: Request, db: Session, message: str = None, error: str = None):
     manager = ScraperManager()
-    latest_run = db.query(Run).filter(Run.is_ready == True).order_by(Run.run_date.desc()).first()
+    # Eagerly load nested relationships to prevent severe N+1 queries
+    # when iterating over latest_published_datasets and deals in the template.
+    latest_run = (
+        db.query(Run)
+        .options(
+            joinedload(Run.published_stores).joinedload(PublishedSnapshotStore.dataset),
+            joinedload(Run.deals)
+        )
+        .filter(Run.is_ready == True)
+        .order_by(Run.run_date.desc())
+        .first()
+    )
     cards = []
     latest_published_datasets = [entry.dataset for entry in latest_run.published_stores if entry.dataset] if latest_run else []
 
