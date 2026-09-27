@@ -3,6 +3,8 @@ import logging
 import os
 import datetime
 import re
+import hashlib
+import secrets
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
@@ -31,6 +33,36 @@ from .store_utils import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def get_password_hash(password: str) -> str:
+    """Hash a password using PBKDF2 HMAC SHA-256 with a random salt."""
+    if password is None:
+        return ""
+    salt = secrets.token_hex(16)
+    # 100,000 iterations for PBKDF2
+    key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return f"{salt}${key.hex()}"
+
+def verify_password(plain_password: Optional[str], stored_password: Optional[str]) -> bool:
+    """Verify a plain password against a stored password.
+    Supports both legacy plaintext passwords and PBKDF2 hashed passwords."""
+    if not plain_password or not stored_password:
+        return False
+
+    # Check if the stored password has the expected structure of a hash (32 hex chars + $ + 64 hex chars)
+    if len(stored_password) == 97 and stored_password[32] == "$":
+        salt, key_hex = stored_password.split('$', 1)
+        # Hash the plain password with the same salt
+        expected_key = hashlib.pbkdf2_hmac(
+            'sha256',
+            plain_password.encode('utf-8'),
+            salt.encode('utf-8'),
+            100000
+        )
+        return secrets.compare_digest(expected_key.hex(), key_hex)
+    else:
+        # Fallback to legacy plaintext comparison, but using constant time comparison just in case
+        return secrets.compare_digest(plain_password, stored_password)
+
 STORE_FLYERS = {
     "ALDI": "https://info.aldi.us/weekly-specials/weekly-ads?zipCode=01376",
     "Big Y": "https://www.bigy.com/weekly-ad/flyerview",
@@ -56,9 +88,10 @@ async def startup_event():
     try:
         admin_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
         if not admin_pass:
-            db.add(Configuration(key="admin_password", value="changeme"))
+            hashed_default = get_password_hash("changeme")
+            db.add(Configuration(key="admin_password", value=hashed_default))
             db.commit()
-            logger.info("Initialized default admin password 'changeme'")
+            logger.info("Initialized default admin password 'changeme' (hashed)")
     finally:
         db.close()
 
@@ -1024,7 +1057,8 @@ async def admin_login(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     password = form.get("password")
     stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
-    if not stored_pass or password != stored_pass.value:
+
+    if not stored_pass or not verify_password(password, stored_pass.value):
         return templates.TemplateResponse(
             request=request,
             name="admin_login.html",
@@ -1105,11 +1139,11 @@ async def admin_change_password(request: Request, db: Session = Depends(get_db))
     if not stored_pass:
         context = _build_admin_context(request, db, error="Configuration error")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
-    if current_password != stored_pass.value:
+    if not verify_password(current_password, stored_pass.value):
         context = _build_admin_context(request, db, error="Invalid current password")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
 
-    stored_pass.value = new_password
+    stored_pass.value = get_password_hash(new_password)
     db.commit()
     context = _build_admin_context(request, db, message="Password updated successfully.")
     return templates.TemplateResponse(request=request, name="admin.html", context=context)
