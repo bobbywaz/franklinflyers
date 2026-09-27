@@ -203,6 +203,19 @@ def test_pharmacies_route_html():
         expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
     )
     db.add(dataset_walgreens)
+
+    dataset_cvs = StoreDataset(
+        store_name="CVS",
+        scraper_key="cvs_greenfield",
+        kind="pharmacy",
+        status="success",
+        trigger_mode="manual",
+        flyer_start_date=datetime.date.today(),
+        flyer_end_date=datetime.date.today() + datetime.timedelta(days=7),
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
+    )
+    db.add(dataset_cvs)
+
     db.commit()
     db.close()
 
