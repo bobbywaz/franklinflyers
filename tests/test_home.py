@@ -4,6 +4,17 @@ from app.main import app
 
 
 def test_home_store_filter_checkboxes():
+
+    from datetime import datetime, timedelta
+    from app.store_utils import utcnow
+    from app.models import StoreDataset, StoreDeal
+    from app.database import get_db
+    db = next(get_db())
+    ds_grocery = StoreDataset(store_name="Big Y", kind="grocery", scraper_key="big_y", status="success", flyer_start_date=utcnow().date() - timedelta(days=1), flyer_end_date=utcnow().date() + timedelta(days=6), expires_at=utcnow() + timedelta(days=6))
+    ds_grocery.deals = [StoreDeal(item_name="Steak", sale_price="$5.99/lb", description="Sirloin")]
+    db.add(ds_grocery)
+    db.commit()
+
     client = TestClient(app)
     response = client.get("/")
     assert response.status_code == 200

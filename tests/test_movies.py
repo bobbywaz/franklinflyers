@@ -167,6 +167,15 @@ def test_upcoming_wheel_movies_filters_and_caps():
     from app.store_utils import get_active_movie_datasets
 
     db = next(get_db())
+
+    from datetime import datetime, timedelta
+    from app.store_utils import utcnow
+    from app.models import StoreDataset, StoreDeal
+    ds_movie = StoreDataset(store_name="Cinemark Hadley", kind="movie", scraper_key="cinemark_hadley", status="success", flyer_start_date=utcnow().date() - timedelta(days=1), flyer_end_date=utcnow().date() + timedelta(days=6), expires_at=utcnow() + timedelta(days=6))
+    ds_movie.deals = [StoreDeal(item_name="Deadpool", sale_price="16:30", description="R")]
+    db.add(ds_movie)
+    db.commit()
+
     tz = zoneinfo.ZoneInfo("America/New_York")
     active = get_active_movie_datasets(db)
     if active and active[0].flyer_start_date:
