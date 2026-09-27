@@ -297,6 +297,17 @@ async def test_analyze_pharmacy_deals_mock():
 
 
 def test_pharmacies_route_ai_sections():
+
+    from datetime import datetime, timedelta
+    from app.store_utils import utcnow
+    from app.models import StoreDataset, StoreDeal
+    from app.database import get_db
+    db = next(get_db())
+    ds_pharmacy = StoreDataset(store_name="CVS Greenfield", kind="pharmacy", scraper_key="cvs_greenfield", status="success", flyer_start_date=utcnow().date() - timedelta(days=1), flyer_end_date=utcnow().date() + timedelta(days=6), expires_at=utcnow() + timedelta(days=6))
+    ds_pharmacy.deals = [StoreDeal(item_name="Vitamin C", sale_price="$10", description="BOGO")]
+    db.add(ds_pharmacy)
+    db.commit()
+
     """Verify /pharmacies renders AI top deals, department sections, and best store value summary."""
     client = TestClient(app)
     response = client.get("/pharmacies")
