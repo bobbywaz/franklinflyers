@@ -52,6 +52,34 @@ def test_categorize_weed():
 
 def test_dispensaries_route_uncapped_and_zero_filler():
     """Verify /dispensaries renders genuine deals uncapped without score <= 6 filler items."""
+    import datetime
+    from app.database import Base, engine, SessionLocal
+    from app.models import StoreDataset, StoreDeal
+    db = SessionLocal()
+
+    dataset = StoreDataset(
+        store_name="Patriot Care",
+        scraper_key="patriot_care",
+        kind="dispensary",
+        status="success",
+        trigger_mode="manual",
+        flyer_start_date=datetime.date.today(),
+        flyer_end_date=datetime.date.today() + datetime.timedelta(days=7),
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
+    )
+    db.add(dataset)
+    db.commit()
+
+    deal = StoreDeal(
+        dataset_id=dataset.id,
+        item_name="Weed Deal",
+        sale_price="$50",
+        description="Sale from $100"
+    )
+    db.add(deal)
+    db.commit()
+    db.close()
+
     client = TestClient(app)
     response = client.get("/dispensaries")
     assert response.status_code == 200

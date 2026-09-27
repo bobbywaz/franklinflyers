@@ -163,11 +163,39 @@ def test_upcoming_wheel_movies_filters_and_caps():
     """Verify activity wheel movies strictly bound showtimes within 2.5h, deduplicate, and cap at 8."""
     import zoneinfo
     from app.main import _get_upcoming_wheel_movies
-    from app.database import get_db
+    from app.database import Base, engine, SessionLocal
     from app.store_utils import get_active_movie_datasets
+    from app.models import StoreDataset, StoreDeal
 
-    db = next(get_db())
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
     tz = zoneinfo.ZoneInfo("America/New_York")
+    now_ref = datetime.datetime.now(tz).replace(hour=16, minute=15, second=0, microsecond=0)
+
+    dataset = StoreDataset(
+        store_name="Garden Cinemas",
+        scraper_key="garden",
+        kind="movie",
+        status="success",
+        trigger_mode="manual",
+        flyer_start_date=now_ref.date(),
+        flyer_end_date=now_ref.date() + datetime.timedelta(days=7),
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
+    )
+    db.add(dataset)
+    db.commit()
+
+    time_str = (now_ref + datetime.timedelta(minutes=30)).strftime("%-I:%M %p").lower()
+
+    deal = StoreDeal(
+        dataset_id=dataset.id,
+        item_name="Test Movie",
+        sale_price=time_str,
+        description="Text text"
+    )
+    db.add(deal)
+    db.commit()
+
     active = get_active_movie_datasets(db)
     if active and active[0].flyer_start_date:
         ref_time = datetime.datetime.combine(active[0].flyer_start_date, datetime.time(16, 15), tzinfo=tz)

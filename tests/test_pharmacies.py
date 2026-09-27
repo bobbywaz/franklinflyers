@@ -185,6 +185,27 @@ def test_get_active_pharmacy_datasets():
 
 def test_pharmacies_route_html():
     """Verify /pharmacies endpoint renders 200 OK with expected markup and navigation."""
+    import datetime
+    from app.database import Base, engine, SessionLocal
+    from app.models import StoreDataset
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+
+    dataset_walgreens = StoreDataset(
+        store_name="Walgreens",
+        scraper_key="walgreens_greenfield",
+        kind="pharmacy",
+        status="success",
+        trigger_mode="manual",
+        flyer_start_date=datetime.date.today(),
+        flyer_end_date=datetime.date.today() + datetime.timedelta(days=7),
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
+    )
+    db.add(dataset_walgreens)
+    db.commit()
+    db.close()
+
     client = TestClient(app)
     response = client.get("/pharmacies")
     assert response.status_code == 200
@@ -298,6 +319,36 @@ async def test_analyze_pharmacy_deals_mock():
 
 def test_pharmacies_route_ai_sections():
     """Verify /pharmacies renders AI top deals, department sections, and best store value summary."""
+    import datetime
+    from app.database import Base, engine, SessionLocal
+    from app.models import StoreDataset, StoreDeal
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+
+    dataset = StoreDataset(
+        store_name="CVS",
+        scraper_key="cvs_greenfield",
+        kind="pharmacy",
+        status="success",
+        trigger_mode="manual",
+        flyer_start_date=datetime.date.today(),
+        flyer_end_date=datetime.date.today() + datetime.timedelta(days=7),
+        expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
+    )
+    db.add(dataset)
+    db.commit()
+
+    deal = StoreDeal(
+        dataset_id=dataset.id,
+        item_name="Vitamin C",
+        sale_price="1.99",
+        description="Text text"
+    )
+    db.add(deal)
+    db.commit()
+    db.close()
+
     client = TestClient(app)
     response = client.get("/pharmacies")
     assert response.status_code == 200
