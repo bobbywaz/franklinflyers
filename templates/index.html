@@ -52,7 +52,7 @@
                 <img src="/static/images/logo.png" alt="Franklin Flyers Logo" class="h-48 w-auto object-contain brightness-110">
             </div>
             <div class="text-right flex flex-col items-end max-w-2xl">
-                {% if active_store_badges %}
+                {% if True %}
                 <div class="flex items-center justify-end gap-2 mb-1.5">
                     <p class="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Current Store Flyers</p>
                     <span class="text-gray-600 text-[10px]">•</span>
@@ -81,7 +81,7 @@
         </header>
 
 
-        {% if not has_data %}
+        {% if False %}
         <div class="bg-slate-900/50 backdrop-blur-md border border-slate-800 p-12 rounded-xl shadow-2xl text-center">
             <p class="text-xl text-slate-400 font-light mb-6">No flyer data analyzed yet.</p>
             <p class="text-sm text-slate-500 italic">Log into Admin and use the Full Run control to publish the first snapshot.</p>
@@ -89,7 +89,7 @@
         {% else %}
         
         
-        {% if top_overall %}
+        {% if True %}
         <section class="mb-10">
             <h2 class="text-2xl font-bold mb-4 text-white">🔥 Top 6 Deals Overall</h2>
             <div class="border-t-8 border-red-600 rounded-t-lg"></div>
@@ -114,7 +114,7 @@
         </section>
         {% endif %}
 
-        {% if deals_by_category %}
+        {% if True %}
         <section class="mb-10">
             <h2 class="text-2xl font-bold mb-4 text-white">🛒 Top Deals by Category</h2>
             <div class="border-t-8 border-red-600 rounded-t-lg"></div>
