@@ -1,0 +1,3 @@
+## 2024-05-24 - N+1 Queries in SQLAlchemy Context Builders
+**Learning:** In SQLAlchemy, accessing un-loaded relationships on a queried model (like `Run.best_store`, `Run.deals`, or `Run.published_stores`) inside a loop or serializer triggers an N+1 query problem, severely impacting performance for views like `_build_admin_context` and `_build_home_context`.
+**Action:** Use `joinedload()` for scalar relationships and `selectinload()` for collection relationships to eagerly load the required data, and chain them for nested relationships (e.g., `selectinload(Run.published_stores).joinedload(PublishedSnapshotStore.dataset)`) to prevent N+1 queries while avoiding Cartesian product memory explosions.
