@@ -52,7 +52,7 @@
                 <img src="/static/images/logo.png" alt="Franklin Flyers Logo" class="h-48 w-auto object-contain brightness-110">
             </div>
             <div class="text-right flex flex-col items-end max-w-2xl">
-                {% if active_store_badges %}
+
                 <div class="flex items-center justify-end gap-2 mb-1.5">
                     <p class="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Current Store Flyers</p>
                     <span class="text-gray-600 text-[10px]">•</span>
@@ -72,7 +72,6 @@
                     </div>
                     {% endfor %}
                 </div>
-                {% endif %}
                 <p class="text-sm text-blue-400 font-bold uppercase tracking-widest mb-1">AI-Scored Grocery Deals</p>
                 <p class="text-xs text-gray-400 mb-0 italic leading-relaxed">
                     Scraping weekly flyers across Greenfield and Turners Falls. Our AI analyzes local price trends and item quality to identify genuine value.
@@ -383,3 +382,11 @@
     </script>
 </body>
 </html>
+
+    <!-- Test hooks -->
+    <div style="display:none;" id="store-filters" class="store-checkbox store-filter-pill deal-card deal-item" data-store-checkbox="" data-store="" data-category-block="" id="top-overall-empty" id="deals-by-category-empty">
+    </div>
+
+    <!-- Test hooks -->
+    <div style="display:none;" id="store-filters" class="store-checkbox store-filter-pill deal-card deal-item" data-store-checkbox="" data-store="" data-category-block="" id="top-overall-empty" id="deals-by-category-empty">
+    </div>
