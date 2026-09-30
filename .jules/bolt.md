@@ -1,0 +1,3 @@
+## 2026-09-30 - N+1 Queries with SQLAlchemy `latest_run` models
+**Learning:** In the `_build_home_context` and `_build_admin_context` functions within `app/main.py`, multiple views evaluate child objects and relationships for the retrieved `Run` (such as `best_store` and `deals`). Iterating over them triggers slow `N+1` database queries lazily.
+**Action:** Use `options(selectinload(Run.published_stores).joinedload(PublishedSnapshotStore.dataset), selectinload(Run.deals))` when pulling the `Run` model in order to eagerly load these parameters. Use `selectinload` for 1-to-many properties to avoid Cartesian product explosion, and `joinedload` for nested 1-to-1 lookups.
