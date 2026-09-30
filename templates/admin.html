@@ -65,7 +65,7 @@
                         <h3 class="text-2xl font-extrabold text-white">{{ card.name }}</h3>
                     </div>
                     <form action="{% if card.scraper_key == 'full_run' %}/admin/run/full{% elif card.scraper_key == 'grocery_run' %}/admin/run/groceries{% else %}/admin/run/{{ card.scraper_key }}{% endif %}" method="POST">
-                        <button type="submit" class="h-12 w-12 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center text-xl font-bold transition-colors shadow-lg shadow-cyan-500/20" title="Run {{ card.name }}">
+                        <button type="submit" class="h-12 w-12 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center text-xl font-bold transition-colors shadow-lg shadow-cyan-500/20" title="Run {{ card.name }}" aria-label="Run {{ card.name }}">
                             ▶
                         </button>
                     </form>
@@ -241,12 +241,12 @@
             </div>
             <form action="/admin/change-password" method="POST" class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-1">Current Password</label>
-                    <input type="password" name="current_password" required class="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    <label for="current_password" class="block text-sm font-medium text-slate-300 mb-1">Current Password</label>
+                    <input id="current_password" type="password" name="current_password" required class="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-1">New Password</label>
-                    <input type="password" name="new_password" required class="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    <label for="new_password" class="block text-sm font-medium text-slate-300 mb-1">New Password</label>
+                    <input id="new_password" type="password" name="new_password" required class="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
                 </div>
                 <button type="submit" class="w-full rounded-2xl bg-amber-500 py-3 text-sm font-bold text-slate-950 hover:bg-amber-400 transition-colors">
                     Update Password
