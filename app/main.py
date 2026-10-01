@@ -82,7 +82,17 @@ def _latest_success_by_key(db: Session, scraper_key: str) -> Optional[StoreDatas
 
 
 def _build_home_context(request: Request, db: Session):
-    latest_run = db.query(Run).options(joinedload(Run.best_store), selectinload(Run.deals)).filter(Run.is_ready == True).order_by(Run.run_date.desc()).first()
+    # Eager load best_store and deals to prevent N+1 lazy loading queries during template rendering.
+    latest_run = (
+        db.query(Run)
+        .options(
+            joinedload(Run.best_store),
+            selectinload(Run.deals)
+        )
+        .filter(Run.is_ready == True)
+        .order_by(Run.run_date.desc())
+        .first()
+    )
     active_grocery_datasets = get_active_grocery_datasets(db)
     active_store_names = {dataset.store_name for dataset in active_grocery_datasets}
 
@@ -139,7 +149,17 @@ def _build_home_context(request: Request, db: Session):
 
 def _build_admin_context(request: Request, db: Session, message: str = None, error: str = None):
     manager = ScraperManager()
-    latest_run = db.query(Run).options(selectinload(Run.deals), selectinload(Run.published_stores).joinedload(PublishedSnapshotStore.dataset)).filter(Run.is_ready == True).order_by(Run.run_date.desc()).first()
+    # Eager load deals, published_stores, and their nested datasets to prevent N+1 queries in admin views.
+    latest_run = (
+        db.query(Run)
+        .options(
+            selectinload(Run.deals),
+            selectinload(Run.published_stores).joinedload(PublishedSnapshotStore.dataset)
+        )
+        .filter(Run.is_ready == True)
+        .order_by(Run.run_date.desc())
+        .first()
+    )
     cards = []
     latest_published_datasets = [entry.dataset for entry in latest_run.published_stores if entry.dataset] if latest_run else []
 
