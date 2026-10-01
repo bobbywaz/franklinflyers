@@ -3,7 +3,24 @@ import logging
 import os
 import datetime
 import re
+import hashlib
+import secrets
 from typing import Dict, List, Optional, Tuple
+
+def get_password_hash(password: str) -> str:
+    salt = secrets.token_hex(16)
+    key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return f"{salt}${key.hex()}"
+
+def verify_password(password: str, hashed_password: str) -> bool:
+    if password is None:
+        return False
+    try:
+        salt, key = hashed_password.split('$')
+        new_key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+        return secrets.compare_digest(key, new_key.hex())
+    except ValueError:
+        return False
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -56,7 +73,7 @@ async def startup_event():
     try:
         admin_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
         if not admin_pass:
-            db.add(Configuration(key="admin_password", value="changeme"))
+            db.add(Configuration(key="admin_password", value=get_password_hash("changeme")))
             db.commit()
             logger.info("Initialized default admin password 'changeme'")
     finally:
@@ -1024,12 +1041,33 @@ async def admin_login(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     password = form.get("password")
     stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
-    if not stored_pass or password != stored_pass.value:
+
+    if not stored_pass:
         return templates.TemplateResponse(
             request=request,
             name="admin_login.html",
             context={"request": request, "error": "Invalid password"},
         )
+
+    is_hashed = len(stored_pass.value) == 97 and stored_pass.value[32] == '$'
+
+    if is_hashed:
+        if not verify_password(password, stored_pass.value):
+            return templates.TemplateResponse(
+                request=request,
+                name="admin_login.html",
+                context={"request": request, "error": "Invalid password"},
+            )
+    else:
+        # Plaintext migration
+        if password != stored_pass.value:
+            return templates.TemplateResponse(
+                request=request,
+                name="admin_login.html",
+                context={"request": request, "error": "Invalid password"},
+            )
+        stored_pass.value = get_password_hash(password)
+        db.commit()
 
     request.session["admin_authenticated"] = True
     return RedirectResponse(url="/admin", status_code=303)
@@ -1105,11 +1143,19 @@ async def admin_change_password(request: Request, db: Session = Depends(get_db))
     if not stored_pass:
         context = _build_admin_context(request, db, error="Configuration error")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
-    if current_password != stored_pass.value:
-        context = _build_admin_context(request, db, error="Invalid current password")
-        return templates.TemplateResponse(request=request, name="admin.html", context=context)
 
-    stored_pass.value = new_password
+    is_hashed = len(stored_pass.value) == 97 and stored_pass.value[32] == '$'
+
+    if is_hashed:
+        if not verify_password(current_password, stored_pass.value):
+            context = _build_admin_context(request, db, error="Invalid current password")
+            return templates.TemplateResponse(request=request, name="admin.html", context=context)
+    else:
+        if current_password != stored_pass.value:
+            context = _build_admin_context(request, db, error="Invalid current password")
+            return templates.TemplateResponse(request=request, name="admin.html", context=context)
+
+    stored_pass.value = get_password_hash(new_password)
     db.commit()
     context = _build_admin_context(request, db, message="Password updated successfully.")
     return templates.TemplateResponse(request=request, name="admin.html", context=context)
