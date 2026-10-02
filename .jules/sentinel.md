@@ -1,0 +1,4 @@
+## 2024-10-02 - Exact Structural Checks for Password Migration
+**Vulnerability:** Plaintext passwords were inadvertently accepted or migrated improperly due to loose substring matching (e.g. `if "$" in hash_string:`) during security upgrade migrations.
+**Learning:** During migration from plaintext to hashed passwords, using a loose substring check to detect hashes can create false positives if users create passwords that naturally contain that substring (e.g., "$"). We must use exact structural checks (like string length and precise separator index) to distinguish hashed passwords from plaintext gracefully.
+**Prevention:** Always implement exact structural checks (e.g., `len(string) == 97 and string[32] == "$"`) when migrating plaintext data to structured formats like hashed secrets. Avoid loose substring checks.
