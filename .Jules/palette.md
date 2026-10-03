@@ -1,0 +1,3 @@
+## 2026-05-15 - Icon-Only Action Buttons in Admin Control
+**Learning:** Screen readers cannot infer the purpose of icon-only action buttons (like a play icon '▶' used to trigger a scraper) without text labels. Even if there is a `title` attribute for mouse hover, structural ARIA labels are required for robust accessibility.
+**Action:** Always add descriptive `aria-label`s to any interactive element (buttons, links) that lack visible text, especially in control panels where actions are critical.
