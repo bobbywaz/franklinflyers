@@ -4,6 +4,23 @@ from app.main import app
 
 
 def test_home_store_filter_checkboxes():
+    from app.database import get_db, SessionLocal
+    from app.models import StoreDataset, Run, Deal
+    from app.store_utils import utcnow
+    import datetime
+    db = SessionLocal()
+    now = utcnow()
+    if not db.query(StoreDataset).filter_by(scraper_key="aldi").first():
+        run = Run(is_ready=True)
+        db.add(run)
+        db.commit()
+        ds = StoreDataset(scraper_key="aldi", store_name="ALDI", kind="grocery", trigger_mode="manual_single", status="success", flyer_start_date=now.date(), flyer_end_date=(now + datetime.timedelta(days=7)).date(), expires_at=now + datetime.timedelta(days=7))
+        db.add(ds)
+        db.commit()
+        deal = Deal(run_id=run.id, store_name="ALDI", item_name="Bread", sale_price="$1", description="Cheap bread", category="Pantry", score=10)
+        db.add(deal)
+        db.commit()
+
     client = TestClient(app)
     response = client.get("/")
     assert response.status_code == 200

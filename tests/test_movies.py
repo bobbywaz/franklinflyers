@@ -162,9 +162,21 @@ def test_events_wheel_includes_upcoming_movies():
 def test_upcoming_wheel_movies_filters_and_caps():
     """Verify activity wheel movies strictly bound showtimes within 2.5h, deduplicate, and cap at 8."""
     import zoneinfo
+    import datetime
     from app.main import _get_upcoming_wheel_movies
-    from app.database import get_db
-    from app.store_utils import get_active_movie_datasets
+    from app.database import get_db, SessionLocal
+    from app.models import StoreDataset, StoreDeal
+    from app.store_utils import get_active_movie_datasets, utcnow
+
+    db = SessionLocal()
+    now = utcnow()
+    if not db.query(StoreDataset).filter_by(scraper_key="greenfield_garden_cinemas").first():
+        ds = StoreDataset(scraper_key="greenfield_garden_cinemas", store_name="Greenfield Garden Cinemas", kind="movie", trigger_mode="manual_single", status="success", flyer_start_date=now.date(), flyer_end_date=(now + datetime.timedelta(days=7)).date(), expires_at=now + datetime.timedelta(days=7))
+        db.add(ds)
+        db.commit()
+        deal = StoreDeal(dataset_id=ds.id, item_name="Deadpool 3", sale_price="4:15 PM, 5:00 PM", description="Movie")
+        db.add(deal)
+        db.commit()
 
     db = next(get_db())
     tz = zoneinfo.ZoneInfo("America/New_York")

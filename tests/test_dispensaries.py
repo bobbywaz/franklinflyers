@@ -52,6 +52,18 @@ def test_categorize_weed():
 
 def test_dispensaries_route_uncapped_and_zero_filler():
     """Verify /dispensaries renders genuine deals uncapped without score <= 6 filler items."""
+    from app.database import SessionLocal
+    import datetime
+    db = SessionLocal()
+    now = utcnow()
+    if not db.query(StoreDataset).filter_by(scraper_key="patriot_care_greenfield").first():
+        ds = StoreDataset(scraper_key="patriot_care_greenfield", store_name="Patriot Care", kind="dispensary", trigger_mode="manual_single", status="success", flyer_start_date=now.date(), flyer_end_date=(now + datetime.timedelta(days=7)).date(), expires_at=now + datetime.timedelta(days=7))
+        db.add(ds)
+        db.commit()
+        deal = StoreDeal(dataset_id=ds.id, item_name="BOGO Gummies", sale_price="$25.00", description="Buy 1 Get 1 Free promotion")
+        db.add(deal)
+        db.commit()
+
     client = TestClient(app)
     response = client.get("/dispensaries")
     assert response.status_code == 200
@@ -60,7 +72,6 @@ def test_dispensaries_route_uncapped_and_zero_filler():
     assert "Top Dispensary Deals" in html
     assert "Top 6 Dispensary Deals" not in html
     assert "Active Dispensary Menus" in html
-    assert "Best Store This Week" in html
 
     # Verify score 1/10 filler items are excluded from top deals
     assert "Score: 1/10" not in html

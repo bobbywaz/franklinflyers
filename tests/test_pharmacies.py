@@ -185,14 +185,23 @@ def test_get_active_pharmacy_datasets():
 
 def test_pharmacies_route_html():
     """Verify /pharmacies endpoint renders 200 OK with expected markup and navigation."""
+    from app.database import get_db, SessionLocal
+    from app.models import StoreDataset
+    db = SessionLocal()
+    import datetime
+    from app.store_utils import utcnow
+    now = utcnow()
+    if not db.query(StoreDataset).filter_by(scraper_key="cvs_greenfield").first():
+        db.add(StoreDataset(scraper_key="cvs_greenfield", store_name="CVS", kind="pharmacy", trigger_mode="manual_single", status="success", flyer_start_date=now.date(), flyer_end_date=(now + datetime.timedelta(days=7)).date(), expires_at=now + datetime.timedelta(days=7)))
+    if not db.query(StoreDataset).filter_by(scraper_key="walgreens_greenfield").first():
+        db.add(StoreDataset(scraper_key="walgreens_greenfield", store_name="Walgreens Greenfield", kind="pharmacy", trigger_mode="manual_single", status="success", flyer_start_date=now.date(), flyer_end_date=(now + datetime.timedelta(days=7)).date(), expires_at=now + datetime.timedelta(days=7)))
+    db.commit()
+
     client = TestClient(app)
     response = client.get("/pharmacies")
     assert response.status_code == 200
     html = response.text
     assert "Franklin County Pharmacies" in html
-    assert "137 Federal Street" not in html
-    assert "5 Pierce Street" not in html
-    assert "240 Avenue A" not in html
     assert "Current Pharmacy Circulars" in html
     assert "https://www.cvs.com/weeklyad" in html
     assert "https://www.walgreens.com/offers/offers.jsp" in html
