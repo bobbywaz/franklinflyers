@@ -1,0 +1,3 @@
+## 2026-10-04 - Combine aria-label and aria-hidden for Icon-Only Buttons and form accessibility
+**Learning:** For interactive icon-only buttons, a `title` attribute alone is insufficient for robust accessibility. They must use an explicit `aria-label` for screen readers while the internal visual icon (e.g. `▶`) must be explicitly wrapped in `<span aria-hidden="true">`. Additionally, form inputs must use a strict `for` and `id` tag relationship so labels can be properly announced and act as larger click targets for their inputs.
+**Action:** When creating or modifying forms and icon-only actions, always pair `<label for="...">` with `<input id="...">`, and structure icon buttons with `aria-label` on the `<button>` and `aria-hidden="true"` on the decorative child icon.
