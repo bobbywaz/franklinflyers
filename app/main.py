@@ -3,6 +3,8 @@ import logging
 import os
 import datetime
 import re
+import hashlib
+import secrets
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
@@ -48,6 +50,30 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
+def get_password_hash(password: str) -> str:
+    """Generate a secure PBKDF2 hash for a password."""
+    salt = secrets.token_hex(16)
+    hashed = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return f"{salt}${hashed.hex()}"
+
+def verify_password(stored_password: str, provided_password: Optional[str]) -> bool:
+    """Securely verify a password against a hash."""
+    if provided_password is None:
+        return False
+
+    if len(stored_password) == 97 and stored_password[32] == "$":
+        # Hashed password logic
+        try:
+            salt, hashed = stored_password.split("$")
+            new_hash = hashlib.pbkdf2_hmac('sha256', provided_password.encode('utf-8'), salt.encode('utf-8'), 100000).hex()
+            return secrets.compare_digest(hashed, new_hash)
+        except ValueError:
+            return False
+    else:
+        # Fallback for unhashed passwords temporarily
+        return secrets.compare_digest(stored_password, provided_password)
+
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
@@ -56,9 +82,15 @@ async def startup_event():
     try:
         admin_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
         if not admin_pass:
-            db.add(Configuration(key="admin_password", value="changeme"))
+            hashed_default = get_password_hash("changeme")
+            db.add(Configuration(key="admin_password", value=hashed_default))
             db.commit()
             logger.info("Initialized default admin password 'changeme'")
+        elif len(admin_pass.value) != 97 or admin_pass.value[32] != "$":
+            # Migrate plaintext password to hashed format
+            admin_pass.value = get_password_hash(admin_pass.value)
+            db.commit()
+            logger.info("Migrated plaintext admin password to hashed format")
     finally:
         db.close()
 
@@ -1024,7 +1056,7 @@ async def admin_login(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     password = form.get("password")
     stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
-    if not stored_pass or password != stored_pass.value:
+    if not stored_pass or not verify_password(stored_pass.value, password):
         return templates.TemplateResponse(
             request=request,
             name="admin_login.html",
@@ -1105,11 +1137,15 @@ async def admin_change_password(request: Request, db: Session = Depends(get_db))
     if not stored_pass:
         context = _build_admin_context(request, db, error="Configuration error")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
-    if current_password != stored_pass.value:
+    if not verify_password(stored_pass.value, current_password):
         context = _build_admin_context(request, db, error="Invalid current password")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
 
-    stored_pass.value = new_password
+    if not new_password:
+        context = _build_admin_context(request, db, error="New password cannot be empty")
+        return templates.TemplateResponse(request=request, name="admin.html", context=context)
+
+    stored_pass.value = get_password_hash(new_password)
     db.commit()
     context = _build_admin_context(request, db, message="Password updated successfully.")
     return templates.TemplateResponse(request=request, name="admin.html", context=context)
