@@ -1,0 +1,4 @@
+## 2025-02-27 - [Hardcoded Plaintext Admin Password Hash & Storage]
+**Vulnerability:** The admin password was previously initialized as a plaintext "changeme" and stored in the database in plaintext. Comparisons during login and password change were done via string equality.
+**Learning:** Storing passwords in plaintext and comparing them with string equality exposes them to potential leakage in case of database access, and the verification step is vulnerable to timing attacks.
+**Prevention:** Always hash passwords before storing them. Use a secure hashing algorithm like PBKDF2 (available via `hashlib` in standard library), generate a secure salt using `secrets`, and use `secrets.compare_digest` for timing-safe string comparison when verifying. Additionally, when migrating, provide a fallback structural check if existing stored passwords need to remain compatible (e.g. check for hash pattern like length and presence of delimiter before attempting hash comparison).
