@@ -1,0 +1,3 @@
+## 2024-05-18 - Optimize Run model queries
+**Learning:** SQLAlchemy context builders `_build_home_context` and `_build_admin_context` suffer from N+1 lazy loading queries when accessing properties like `run.best_store`, `run.deals`, and `run.published_stores`. Using `selectinload()` instead of `joinedload()` for collection relationships (like `deals` and `published_stores`) avoids Cartesian product memory explosions, while `joinedload()` is appropriate for scalar relationships (like `best_store` and nested `dataset`).
+**Action:** Always explicitly eager-load related models using `.options()` with appropriate loading strategies (`joinedload` for scalars, `selectinload` for collections) when building contexts for views that iterate over relationships.

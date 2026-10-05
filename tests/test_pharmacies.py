@@ -2,6 +2,85 @@ import datetime
 from typing import Any, Dict
 import pytest
 from starlette.testclient import TestClient
+import pytest
+
+
+@pytest.fixture(scope="module", autouse=True)
+def setup_db_module():
+    from app.database import Base, engine, SessionLocal
+    from app.models import StoreDataset, StoreDeal, Configuration
+    import datetime
+    from app.store_utils import utcnow
+    import json
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+
+    # Active pharmacy dataset
+    dataset = StoreDataset(scraper_key="cvs_greenfield", store_name="CVS Pharmacy", kind="pharmacy", status="success", trigger_mode="manual", expires_at=utcnow()+datetime.timedelta(days=1))
+    db.add(dataset)
+    db.commit()
+
+    deal = StoreDeal(dataset_id=dataset.id, item_name="Test Pharma Item", description="Vitamins", sale_price="$5.00")
+    db.add(deal)
+    db.commit()
+
+    # Needs a config for pharmacy_ai_analysis
+    sig = f"{dataset.id}_{dataset.finished_at.isoformat() if dataset.finished_at else ''}_{len(dataset.deals)}"
+
+    analysis_payload = {
+        "sig": sig,
+        "analysis": {
+            "scored_deals": [
+                {
+                    "scraper_key": "cvs_greenfield",
+                    "store_name": "CVS Pharmacy",
+                    "name": "Test Pharma Item",
+                    "category": "Vitamins",
+                    "score": 8,
+                    "price": "$5.00"
+                }
+            ],
+            "top_overall": [
+                {
+                    "scraper_key": "cvs_greenfield",
+                    "store_name": "CVS Pharmacy",
+                    "name": "Test Pharma Item",
+                    "category": "Vitamins",
+                    "score": 8,
+                    "price": "$5.00"
+                }
+            ],
+            "deals_by_category": {
+                "Vitamins": [
+                    {
+                        "scraper_key": "cvs_greenfield",
+                        "store_name": "CVS Pharmacy",
+                        "name": "Test Pharma Item",
+                        "category": "Vitamins",
+                        "score": 8,
+                        "price": "$5.00"
+                    }
+                ]
+            },
+            "best_pharmacy": {
+                "store_name": "CVS Pharmacy",
+                "score": 8,
+                "summary": "Best"
+            }
+        }
+    }
+    config = db.query(Configuration).filter(Configuration.key=="pharmacy_ai_analysis").first()
+    if not config:
+        config = Configuration(key="pharmacy_ai_analysis", value=json.dumps(analysis_payload))
+        db.add(config)
+    else:
+        config.value = json.dumps(analysis_payload)
+    db.commit()
+
+    yield
+    db.close()
+
 
 from app.database import Base, SessionLocal, engine
 from app.main import app
