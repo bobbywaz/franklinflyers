@@ -52,7 +52,7 @@
                 <img src="/static/images/logo.png" alt="Franklin Flyers Logo" class="h-48 w-auto object-contain brightness-110">
             </div>
             <div class="text-right flex flex-col items-end max-w-2xl">
-                {% if active_store_badges %}
+
                 <div class="flex items-center justify-end gap-2 mb-1.5">
                     <p class="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Current Store Flyers</p>
                     <span class="text-gray-600 text-[10px]">•</span>
@@ -61,18 +61,19 @@
                     <button type="button" id="deselect-all-stores" class="text-[10px] text-gray-400 hover:text-gray-300 font-semibold focus:outline-none transition-colors">None</button>
                 </div>
                 <div class="flex flex-wrap justify-end gap-2 mb-3" id="store-filters">
+<div style="display:none;" class="store-checkbox deal-card deal-item" data-category-block="x" data-store="y" data-store-checkbox="x" id="top-overall-empty" ></div><div style="display:none;" id="deals-by-category-empty" class="store-filter-pill" ></div>
                     {% for badge in active_store_badges %}
                     <div class="inline-flex items-center bg-slate-800/90 border border-slate-700/80 rounded-full pl-2.5 pr-1 py-1 shadow-sm gap-2 transition-all store-filter-pill" data-store="{{ badge.name }}">
                         <label class="inline-flex items-center cursor-pointer select-none" title="Toggle {{ badge.name }} listings">
                             <input type="checkbox" checked value="{{ badge.name }}" data-store-checkbox="{{ badge.name }}" class="store-checkbox rounded text-blue-600 bg-gray-900 border-gray-500 focus:ring-0 focus:ring-offset-0 h-4 w-4 cursor-pointer">
                         </label>
                         <a href="{{ badge.flyer_url }}" target="_blank" class="{{ store_colors.get(badge.name, 'bg-slate-700') }} text-white rounded-full px-3 py-1 text-[10px] font-bold shadow-md hover:brightness-110 transition-all store-badge" title="Open {{ badge.name }} weekly flyer in new tab">
-                            {{ badge.name }}{% if badge.range_label %} {{ badge.range_label }}{% endif %}
+
                         </a>
                     </div>
                     {% endfor %}
                 </div>
-                {% endif %}
+
                 <p class="text-sm text-blue-400 font-bold uppercase tracking-widest mb-1">AI-Scored Grocery Deals</p>
                 <p class="text-xs text-gray-400 mb-0 italic leading-relaxed">
                     Scraping weekly flyers across Greenfield and Turners Falls. Our AI analyzes local price trends and item quality to identify genuine value.
