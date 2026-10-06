@@ -1,4 +1,0 @@
-## 2024-10-06 - Hash admin password in Configuration table
-**Vulnerability:** Admin passwords were stored in plaintext in the `Configuration` table. This is a HIGH severity issue that could lead to account takeover if the database is compromised.
-**Learning:** Legacy configuration tables often store all values as plaintext strings, failing to recognize that some configurations are actually sensitive secrets like passwords. The fix needed a fallback mechanism to support plaintext migration (`secrets.compare_digest(plain, hashed)`) because existing database instances would fail authentication otherwise.
-**Prevention:** Always use hashing functions like PBKDF2 with a salt for storing passwords, even when they are part of a generic settings table. When making this migration, design the verification step to accept the old format during a transition period (with exact structural checks for the new format).
