@@ -1,0 +1,3 @@
+## 2024-10-06 - Optimize N+1 queries in context builders
+**Learning:** In SQLAlchemy, failing to explicitly load scalar (`best_store`) or collection (`deals`, `published_stores`) relationships on large or frequent queries (like the `Run` object fetches in the home and admin context builders) causes severe N+1 lazy loading problems, especially when rendering template lists.
+**Action:** Use `.options(joinedload(...))` for one-to-one relationships and `.options(selectinload(...))` for one-to-many collections when querying models that will be iterated over in templates, to fetch the data in a minimal number of optimized queries. For nested relationships, chain them (e.g. `selectinload(Model.rel).joinedload(ChildModel.rel)`).
