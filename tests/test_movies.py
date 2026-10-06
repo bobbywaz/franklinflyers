@@ -163,24 +163,57 @@ def test_upcoming_wheel_movies_filters_and_caps():
     """Verify activity wheel movies strictly bound showtimes within 2.5h, deduplicate, and cap at 8."""
     import zoneinfo
     from app.main import _get_upcoming_wheel_movies
-    from app.database import get_db
+    from app.database import get_db, SessionLocal
     from app.store_utils import get_active_movie_datasets
+    from app.models import StoreDataset, StoreDeal
+    from datetime import datetime, timedelta, timezone
 
-    db = next(get_db())
+    db = SessionLocal()
+    now = datetime.now(timezone.utc)
+    ds = StoreDataset(
+        scraper_key="cinemark_hadley",
+        store_name="Hadley Cinemark",
+        kind="movie",
+        trigger_mode="manual_single",
+        status="success",
+        flyer_start_date=(now - timedelta(days=1)).date(),
+        flyer_end_date=(now + timedelta(days=6)).date(),
+        expires_at=now + timedelta(days=6),
+    )
+    db.add(ds)
+    db.commit()
+    db.refresh(ds)
+
+    deal1 = StoreDeal(
+        dataset_id=ds.id,
+        item_name="Fake Movie",
+        description='{"showtimes": [{"time": "16:20", "ampm": "PM", "is_next_day": false}], "rating": "PG-13", "poster": "http", "runtime": "1h"}',
+        sale_price="4:20 PM",
+    )
+    deal2 = StoreDeal(
+        dataset_id=ds.id,
+        item_name="Fake Movie 2",
+        description='{"showtimes": [{"time": "17:20", "ampm": "PM", "is_next_day": false}], "rating": "PG-13", "poster": "http", "runtime": "1h"}',
+        sale_price="5:20 PM",
+    )
+    db.add_all([deal1, deal2])
+    db.commit()
+
     tz = zoneinfo.ZoneInfo("America/New_York")
     active = get_active_movie_datasets(db)
+    import datetime as dt
     if active and active[0].flyer_start_date:
-        ref_time = datetime.datetime.combine(active[0].flyer_start_date, datetime.time(16, 15), tzinfo=tz)
+        ref_time = dt.datetime.combine(active[0].flyer_start_date, dt.time(16, 15), tzinfo=tz)
     else:
-        ref_time = datetime.datetime.now(tz).replace(hour=16, minute=15, second=0, microsecond=0)
+        ref_time = dt.datetime.now(tz).replace(hour=16, minute=15, second=0, microsecond=0)
 
     # Within 2.5 hours, capped at 8
     movies = _get_upcoming_wheel_movies(db, today=ref_time.date(), max_hours_ahead=2.5, max_movies=8, now_ref=ref_time)
     assert 0 < len(movies) <= 8
 
     # All returned movies must have showtimes within the allowed window
-    min_allowed = ref_time - datetime.timedelta(minutes=10)
-    max_allowed = ref_time + datetime.timedelta(hours=2.5)
+    min_allowed = ref_time - timedelta(minutes=10)
+    max_allowed = ref_time + timedelta(hours=2.5)
     for m in movies:
         assert m["is_movie"] is True
         assert min_allowed <= m["next_dt"] <= max_allowed
@@ -192,5 +225,5 @@ def test_upcoming_wheel_movies_filters_and_caps():
     # Tighter window: 30 minutes
     narrow_movies = _get_upcoming_wheel_movies(db, today=ref_time.date(), max_hours_ahead=0.5, max_movies=8, now_ref=ref_time)
     for m in narrow_movies:
-        assert m["next_dt"] <= ref_time + datetime.timedelta(hours=0.5)
+        assert m["next_dt"] <= ref_time + timedelta(hours=0.5)
 
