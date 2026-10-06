@@ -201,7 +201,17 @@ def test_pharmacies_route_html():
         flyer_end_date=(now + timedelta(days=6)).date(),
         expires_at=now + timedelta(days=6),
     )
-    db.add(ds1)
+    ds2 = StoreDataset(
+        scraper_key="cvs_greenfield",
+        store_name="CVS Greenfield",
+        kind="pharmacy",
+        trigger_mode="manual_single",
+        status="success",
+        flyer_start_date=(now - timedelta(days=1)).date(),
+        flyer_end_date=(now + timedelta(days=6)).date(),
+        expires_at=now + timedelta(days=6),
+    )
+    db.add_all([ds1, ds2])
     db.commit()
 
     client = TestClient(app)
