@@ -185,6 +185,25 @@ def test_get_active_pharmacy_datasets():
 
 def test_pharmacies_route_html():
     """Verify /pharmacies endpoint renders 200 OK with expected markup and navigation."""
+    from datetime import datetime, timedelta, timezone
+    from app.database import SessionLocal
+    from app.models import StoreDataset
+
+    db = SessionLocal()
+    now = datetime.now(timezone.utc)
+    ds1 = StoreDataset(
+        scraper_key="walgreens_greenfield",
+        store_name="Walgreens Greenfield",
+        kind="pharmacy",
+        trigger_mode="manual_single",
+        status="success",
+        flyer_start_date=(now - timedelta(days=1)).date(),
+        flyer_end_date=(now + timedelta(days=6)).date(),
+        expires_at=now + timedelta(days=6),
+    )
+    db.add(ds1)
+    db.commit()
+
     client = TestClient(app)
     response = client.get("/pharmacies")
     assert response.status_code == 200
@@ -298,6 +317,59 @@ async def test_analyze_pharmacy_deals_mock():
 
 def test_pharmacies_route_ai_sections():
     """Verify /pharmacies renders AI top deals, department sections, and best store value summary."""
+    from datetime import datetime, timedelta, timezone
+    import json
+    from app.database import SessionLocal
+    from app.models import StoreDataset, StoreDeal, Configuration
+
+    db = SessionLocal()
+    now = datetime.now(timezone.utc)
+    ds = StoreDataset(
+        scraper_key="cvs_greenfield",
+        store_name="CVS Greenfield",
+        kind="pharmacy",
+        trigger_mode="manual_single",
+        status="success",
+        flyer_start_date=(now - timedelta(days=1)).date(),
+        flyer_end_date=(now + timedelta(days=6)).date(),
+        expires_at=now + timedelta(days=6),
+        finished_at=now,
+    )
+    db.add(ds)
+    db.commit()
+    db.refresh(ds)
+
+    deal1 = StoreDeal(
+        dataset_id=ds.id,
+        item_name="Super High Score Deal",
+        description="Sale from $50.00",
+        sale_price="$10.00",
+    )
+    db.add(deal1)
+    db.commit()
+
+    sig = f"{ds.id}_{ds.finished_at.isoformat()}_{len(ds.deals)}"
+
+    config = db.query(Configuration).filter(Configuration.key == "pharmacy_ai_analysis").first()
+    if not config:
+        config = Configuration(
+            key="pharmacy_ai_analysis",
+            value=json.dumps({"sig": sig, "analysis": {
+                "top_overall": [{"store_name": "CVS Greenfield", "item_name": "Super High Score Deal", "category": "Vitamins & Supplements", "score": 10, "sale_price": "$10", "description": "Good", "original_price": "$50"}],
+                "deals_by_category": {"Vitamins & Supplements": [{"store_name": "CVS Greenfield", "item_name": "Super High Score Deal", "category": "Vitamins & Supplements", "score": 10, "sale_price": "$10", "description": "Good", "original_price": "$50"}]},
+                "best_pharmacy": {"store_name": "CVS Greenfield", "score": 10, "summary": "Great", "strengths": "Good", "weaknesses": "None"}
+            }})
+        )
+        db.add(config)
+    else:
+        config.value = json.dumps({"sig": sig, "analysis": {
+            "top_overall": [{"store_name": "CVS Greenfield", "item_name": "Super High Score Deal", "category": "Vitamins & Supplements", "score": 10, "sale_price": "$10", "description": "Good", "original_price": "$50"}],
+            "deals_by_category": {"Vitamins & Supplements": [{"store_name": "CVS Greenfield", "item_name": "Super High Score Deal", "category": "Vitamins & Supplements", "score": 10, "sale_price": "$10", "description": "Good", "original_price": "$50"}]},
+            "best_pharmacy": {"store_name": "CVS Greenfield", "score": 10, "summary": "Great", "strengths": "Good", "weaknesses": "None"}
+        }})
+    db.commit()
+    db.close()
+
     client = TestClient(app)
     response = client.get("/pharmacies")
     assert response.status_code == 200

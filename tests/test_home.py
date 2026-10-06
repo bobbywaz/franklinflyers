@@ -4,6 +4,46 @@ from app.main import app
 
 
 def test_home_store_filter_checkboxes():
+    from datetime import datetime, timedelta, timezone
+    from app.database import SessionLocal
+    from app.models import StoreDataset, StoreDeal, Run, PublishedSnapshotStore, Deal
+
+    db = SessionLocal()
+    now = datetime.now(timezone.utc)
+    ds = StoreDataset(
+        scraper_key="aldi",
+        store_name="ALDI",
+        kind="grocery",
+        trigger_mode="manual_single",
+        status="success",
+        flyer_start_date=(now - timedelta(days=1)).date(),
+        flyer_end_date=(now + timedelta(days=6)).date(),
+        expires_at=now + timedelta(days=6),
+    )
+    db.add(ds)
+    db.commit()
+    db.refresh(ds)
+
+    run = Run(is_ready=True)
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+
+    pss = PublishedSnapshotStore(run_id=run.id, store_dataset_id=ds.id, scraper_key="aldi", store_name="ALDI")
+
+    deal1 = Deal(
+        run_id=run.id,
+        store_name="ALDI",
+        item_name="Super High Score Deal",
+        description="Sale from $50.00",
+        sale_price="$10.00",
+        score=10,
+        category="Produce"
+    )
+    db.add_all([pss, deal1])
+    db.commit()
+    db.close()
+
     client = TestClient(app)
     response = client.get("/")
     assert response.status_code == 200
