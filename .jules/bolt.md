@@ -1,0 +1,3 @@
+## 2024-05-24 - Fix N+1 Queries in SQLAlchemy Run Models
+**Learning:** Using implicit lazy-loading when querying a main object with associated relations that are subsequently iterated (like `Run.best_store`, `Run.deals`, and `Run.published_stores` mapped via `PublishedSnapshotStore.dataset`) results in severe N+1 query problems in SQLAlchemy. In this app, building the admin context was issuing over 80 queries for a single view.
+**Action:** Always explicitly use SQLAlchemy's eager loading options (`joinedload` for scalar single-object relationships and `selectinload` for collections) in context builders like `_build_home_context` and `_build_admin_context` to fetch all related entities efficiently in a fixed number of queries.
