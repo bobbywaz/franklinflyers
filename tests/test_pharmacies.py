@@ -296,13 +296,52 @@ async def test_analyze_pharmacy_deals_mock():
     assert all(cat in result["deals_by_category"] for cat in PHARMACY_CATEGORIES)
 
 
+
 def test_pharmacies_route_ai_sections():
     """Verify /pharmacies renders AI top deals, department sections, and best store value summary."""
+    import datetime
+    from app.database import SessionLocal, init_db, Base, engine
+    from app.models import StoreDataset, StoreDeal
+
+    Base.metadata.drop_all(bind=engine)
+    init_db()
+    db = SessionLocal()
+
+    ref_time = datetime.datetime.utcnow()
+
+    dataset = StoreDataset(
+        scraper_key="cvs_greenfield",
+        store_name="CVS Pharmacy",
+        kind="pharmacy",
+        trigger_mode="manual",
+        status="success",
+        flyer_start_date=ref_time.date(),
+        flyer_end_date=ref_time.date() + datetime.timedelta(days=7),
+        expires_at=ref_time + datetime.timedelta(days=7),
+        finished_at=ref_time
+    )
+
+    # Need a really good deal to get a high score so it shows up in "Top Pharmacy Deals Overall"
+    deal = StoreDeal(
+        dataset=dataset,
+        item_name="Nature's Bounty Vitamins",
+        sale_price="BOGO Free",
+        description="Buy 1 Get 1 Free on all Nature's Bounty Vitamins"
+    )
+
+    db.add(dataset)
+    db.commit()
+
+    # The AI scoring happens via GeminiAnalyzer. Since tests run with mock mode,
+    # the analyzer returns mock data when it sees `mock` config or by default in tests.
     client = TestClient(app)
     response = client.get("/pharmacies")
     assert response.status_code == 200
     html = response.text
 
+    db.close()
+
+    assert "Top Pharmacy Deals Overall" in html
     assert "Top Pharmacy Deals Overall" in html
     assert "Top Deals by Department" in html
     assert "Best Pharmacy Value This Week" in html
