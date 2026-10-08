@@ -1,0 +1,4 @@
+## 2024-05-15 - Plaintext Password Storage Fix
+**Vulnerability:** Admin passwords were stored in plaintext in the SQLite database (`configurations` table) and compared using direct equality, leading to potential data exposure and timing attacks.
+**Learning:** Legacy systems might rely on plaintext passwords stored during initial configuration. When fixing this, we must maintain backward compatibility by implementing a migration path (e.g. at startup) that transparently hashes old plaintext passwords. We also must ensure standard string operators (`==`) are replaced by timing-safe equivalents (`secrets.compare_digest`).
+**Prevention:** Always enforce secure storage (like PBKDF2 with a random salt) from day one. When adding hashing to an existing system, ensure seamless migration for stored secrets and always use `secrets.compare_digest` for comparison.
