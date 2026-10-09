@@ -1,0 +1,3 @@
+## 2025-05-18 - Accessibility Associations on Password Inputs and Icon-Only Buttons
+**Learning:** HTML templates in this project lacked basic a11y bindings. Specifically, password inputs lacked `id` attributes that matched their label's `for` attributes, and icon-only buttons (like the `▶` play button on the admin page) used a `title` attribute for tooltips but missed `aria-label` attributes for screen readers and `aria-hidden` on the visual symbols.
+**Action:** Always ensure complete semantic accessibility standards, including explicit `for`/`id` bindings on all form inputs, and `aria-label` with `aria-hidden="true"` inner spans for icon-only buttons when modifying UI components in this codebase.
