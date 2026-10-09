@@ -1,0 +1,4 @@
+## 2025-02-28 - Secure Password Storage
+**Vulnerability:** Admin passwords were stored in plaintext in the database, allowing anyone with database access to read them and reuse them if the administrator reused passwords elsewhere.
+**Learning:** The application initialized and compared passwords via direct string matching on the `Configuration` model's value. To migrate securely without breaking existing instances instantly, a hybrid approach checking `len(stored_password) == 97 and stored_password[32] == "$"` can differentiate plaintext from PBKDF2 hashes before fallback.
+**Prevention:** Always use a secure key derivation function like `PBKDF2`, `bcrypt`, or `Argon2` with a random salt when storing passwords. Use constant-time comparison algorithms like `secrets.compare_digest` to prevent timing attacks when comparing passwords.
