@@ -1,0 +1,11 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index a7c558c..1b0a887 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -23,5 +23,5 @@ jobs:
+           python -m playwright install --with-deps chromium
+
+       - name: Run pytest test suite
+         run: |
+-          pytest -v
++          python -m pytest -v
