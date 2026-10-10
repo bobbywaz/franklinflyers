@@ -1,6 +1,8 @@
+import hashlib
 import json
 import logging
 import os
+import secrets
 import datetime
 import re
 from typing import Dict, List, Optional, Tuple
@@ -31,6 +33,31 @@ from .store_utils import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def get_password_hash(password: str) -> str:
+    salt = secrets.token_hex(16)
+    hash_bytes = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    hash_hex = hash_bytes.hex()
+    return f"{salt}${hash_hex}"
+
+
+def is_hashed(password: str) -> bool:
+    return len(password) == 97 and password[32] == "$"
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if plain_password is None or hashed_password is None:
+        return False
+    if not is_hashed(hashed_password):
+        return False
+    try:
+        salt, hash_hex = hashed_password.split("$")
+        hash_bytes = hashlib.pbkdf2_hmac('sha256', plain_password.encode('utf-8'), salt.encode('utf-8'), 100000)
+        return secrets.compare_digest(hash_bytes.hex(), hash_hex)
+    except ValueError:
+        return False
+
+
 STORE_FLYERS = {
     "ALDI": "https://info.aldi.us/weekly-specials/weekly-ads?zipCode=01376",
     "Big Y": "https://www.bigy.com/weekly-ad/flyerview",
@@ -56,9 +83,13 @@ async def startup_event():
     try:
         admin_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
         if not admin_pass:
-            db.add(Configuration(key="admin_password", value="changeme"))
+            db.add(Configuration(key="admin_password", value=get_password_hash("changeme")))
             db.commit()
             logger.info("Initialized default admin password 'changeme'")
+        elif admin_pass.value and not is_hashed(admin_pass.value):
+            admin_pass.value = get_password_hash(admin_pass.value)
+            db.commit()
+            logger.info("Migrated plaintext admin password to hashed format")
     finally:
         db.close()
 
@@ -1024,7 +1055,16 @@ async def admin_login(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     password = form.get("password")
     stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
-    if not stored_pass or password != stored_pass.value:
+
+    is_valid = False
+    if stored_pass and stored_pass.value:
+        if is_hashed(stored_pass.value):
+            is_valid = verify_password(password, stored_pass.value)
+        else:
+            # Fallback for unmigrated legacy passwords using secure comparison
+            is_valid = (password is not None) and secrets.compare_digest(password, stored_pass.value)
+
+    if not is_valid:
         return templates.TemplateResponse(
             request=request,
             name="admin_login.html",
@@ -1105,13 +1145,25 @@ async def admin_change_password(request: Request, db: Session = Depends(get_db))
     if not stored_pass:
         context = _build_admin_context(request, db, error="Configuration error")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
-    if current_password != stored_pass.value:
+
+    is_valid = False
+    if stored_pass.value:
+        if is_hashed(stored_pass.value):
+            is_valid = verify_password(current_password, stored_pass.value)
+        else:
+            is_valid = (current_password is not None) and secrets.compare_digest(current_password, stored_pass.value)
+
+    if not is_valid:
         context = _build_admin_context(request, db, error="Invalid current password")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
 
-    stored_pass.value = new_password
-    db.commit()
-    context = _build_admin_context(request, db, message="Password updated successfully.")
+    if new_password:
+        stored_pass.value = get_password_hash(new_password)
+        db.commit()
+        context = _build_admin_context(request, db, message="Password updated successfully.")
+    else:
+        context = _build_admin_context(request, db, error="New password cannot be empty.")
+
     return templates.TemplateResponse(request=request, name="admin.html", context=context)
 
 
