@@ -162,20 +162,53 @@ def test_events_wheel_includes_upcoming_movies():
 def test_upcoming_wheel_movies_filters_and_caps():
     """Verify activity wheel movies strictly bound showtimes within 2.5h, deduplicate, and cap at 8."""
     import zoneinfo
+    import json
     from app.main import _get_upcoming_wheel_movies
-    from app.database import get_db
+    from app.database import get_db, SessionLocal
     from app.store_utils import get_active_movie_datasets
+    from app.models import StoreDataset, StoreDeal
 
-    db = next(get_db())
+    db = SessionLocal()
+    ds = StoreDataset(
+        scraper_key='greenfield_garden_cinemas',
+        store_name='Garden Cinemas',
+        kind='movie',
+        trigger_mode='manual',
+        status='success',
+        item_count=1,
+        items_scraped_count=1,
+        flyer_start_date=datetime.date.today(),
+        flyer_end_date=datetime.date.today(),
+        expires_at=datetime.datetime.now() + datetime.timedelta(days=1)
+    )
+    db.add(ds)
+    db.commit()
+
     tz = zoneinfo.ZoneInfo("America/New_York")
-    active = get_active_movie_datasets(db)
-    if active and active[0].flyer_start_date:
-        ref_time = datetime.datetime.combine(active[0].flyer_start_date, datetime.time(16, 15), tzinfo=tz)
-    else:
-        ref_time = datetime.datetime.now(tz).replace(hour=16, minute=15, second=0, microsecond=0)
+    ref_time = datetime.datetime.now(tz).replace(hour=16, minute=15, second=0, microsecond=0)
+    if ds.flyer_start_date:
+        ref_time = datetime.datetime.combine(ds.flyer_start_date, datetime.time(16, 15), tzinfo=tz)
+
+    target_time = ref_time + datetime.timedelta(hours=1)
+    showtime_str = target_time.strftime("%I:%M %p")
+
+    deal = StoreDeal(
+        dataset_id=ds.id,
+        item_name='Test Movie',
+        sale_price=showtime_str,
+        description=json.dumps({"showtimes": [showtime_str]})
+    )
+    db.add(deal)
+    db.commit()
 
     # Within 2.5 hours, capped at 8
     movies = _get_upcoming_wheel_movies(db, today=ref_time.date(), max_hours_ahead=2.5, max_movies=8, now_ref=ref_time)
+
+    db.delete(deal)
+    db.delete(ds)
+    db.commit()
+    db.close()
+
     assert 0 < len(movies) <= 8
 
     # All returned movies must have showtimes within the allowed window

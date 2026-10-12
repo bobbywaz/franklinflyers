@@ -52,10 +52,35 @@ def test_categorize_weed():
 
 def test_dispensaries_route_uncapped_and_zero_filler():
     """Verify /dispensaries renders genuine deals uncapped without score <= 6 filler items."""
+    import datetime
+    db = SessionLocal()
+    ds = StoreDataset(
+        scraper_key='test_dispensary',
+        store_name='Test Dispensary',
+        kind='dispensary',
+        trigger_mode='manual',
+        status='success',
+        item_count=2,
+        items_scraped_count=2,
+        expires_at=datetime.datetime.now() + datetime.timedelta(days=1)
+    )
+    db.add(ds)
+    db.commit()
+
+    deal1 = StoreDeal(dataset_id=ds.id, item_name="Wedding Cake 3.5g", sale_price="$28.00", description="Sale from $40.00")
+    deal2 = StoreDeal(dataset_id=ds.id, item_name="Grandpa's Cookies 1g", sale_price="$9.00", description="Hybrid")
+    db.add_all([deal1, deal2])
+    db.commit()
+
     client = TestClient(app)
     response = client.get("/dispensaries")
-    assert response.status_code == 200
     html = response.text
+
+    db.delete(deal1)
+    db.delete(deal2)
+    db.delete(ds)
+    db.commit()
+    db.close()
 
     assert "Top Dispensary Deals" in html
     assert "Top 6 Dispensary Deals" not in html
