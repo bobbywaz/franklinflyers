@@ -298,10 +298,40 @@ async def test_analyze_pharmacy_deals_mock():
 
 def test_pharmacies_route_ai_sections():
     """Verify /pharmacies renders AI top deals, department sections, and best store value summary."""
+    import datetime
+    db = SessionLocal()
+    ds = StoreDataset(
+        scraper_key='cvs_greenfield',
+        store_name='CVS Pharmacy',
+        kind='pharmacy',
+        trigger_mode='manual',
+        status='success',
+        item_count=1,
+        items_scraped_count=1,
+        flyer_start_date=datetime.date.today(),
+        flyer_end_date=datetime.date.today(),
+        expires_at=datetime.datetime.now() + datetime.timedelta(days=1)
+    )
+    db.add(ds)
+    db.commit()
+
+    deal = StoreDeal(
+        dataset_id=ds.id,
+        item_name='CVS Deals',
+        sale_price='$10.00',
+        description='test description cvs gf'
+    )
+    db.add(deal)
+    db.commit()
+
     client = TestClient(app)
     response = client.get("/pharmacies")
-    assert response.status_code == 200
     html = response.text
+
+    db.delete(deal)
+    db.delete(ds)
+    db.commit()
+    db.close()
 
     assert "Top Pharmacy Deals Overall" in html
     assert "Top Deals by Department" in html

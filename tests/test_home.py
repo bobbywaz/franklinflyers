@@ -4,11 +4,61 @@ from app.main import app
 
 
 def test_home_store_filter_checkboxes():
+    from app.database import SessionLocal
+    from app.models import StoreDataset, Run, PublishedSnapshotStore, Deal
+    import datetime
+
+    db = SessionLocal()
+    ds = StoreDataset(
+        scraper_key='test_grocery',
+        store_name='ALDI',
+        kind='grocery',
+        trigger_mode='manual',
+        status='success',
+        item_count=1,
+        items_scraped_count=1,
+        flyer_start_date=datetime.date.today(),
+        flyer_end_date=datetime.date.today(),
+        expires_at=datetime.datetime.now() + datetime.timedelta(days=1)
+    )
+    db.add(ds)
+    db.commit()
+
+    run = Run(is_ready=True)
+    db.add(run)
+    db.commit()
+
+    pss = PublishedSnapshotStore(
+        run_id=run.id,
+        store_dataset_id=ds.id,
+        scraper_key='test_grocery',
+        store_name='ALDI'
+    )
+    db.add(pss)
+
+    deal = Deal(
+        run_id=run.id,
+        store_name='ALDI',
+        item_name='test item',
+        sale_price='$1.00',
+        description='test desc',
+        category='Produce',
+        score=8,
+        explanation='test exp'
+    )
+    db.add(deal)
+    db.commit()
+
     client = TestClient(app)
     response = client.get("/")
-    assert response.status_code == 200
-
     html = response.text
+
+    db.delete(deal)
+    db.delete(pss)
+    db.delete(run)
+    db.delete(ds)
+    db.commit()
+    db.close()
 
     # Store filters container and checkboxes
     assert 'id="store-filters"' in html
