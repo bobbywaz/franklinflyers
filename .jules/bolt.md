@@ -1,0 +1,3 @@
+## YYYY-MM-DD - Admin N+1 Query Fix
+**Learning:** Found an N+1 query issue in the admin dashboard page (`_build_admin_context` in `app/main.py`). The dashboard iterates over a list of scrapers from `manager.list_scrapers()` and calls three database query functions for every scraper (`get_latest_attempt_by_key`, `_latest_success_by_key`, and `get_active_dataset_by_key`). When the number of scrapers scales up, this creates O(N) database queries which slows down page load time.
+**Action:** Replace the per-scraper queries with three batched subqueries using `func.max(StoreDataset.id).group_by(StoreDataset.scraper_key)` combined with `JOIN` to fetch all relevant `StoreDataset` rows in exactly 3 bulk queries, significantly reducing database round trips and latency.
