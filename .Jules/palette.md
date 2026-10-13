@@ -1,0 +1,3 @@
+## 2024-10-13 - Add Accessibility to Icon-Only Admin Action Buttons
+**Learning:** Icon-only actionable elements (like the '▶' play buttons on the scraper control cards) lack semantic context for screen readers and can be difficult to navigate via keyboard without visible focus states. Relying on a 'title' attribute is insufficient for accessibility.
+**Action:** When creating or modifying icon-only buttons, always ensure they have an explicit `aria-label` describing the action, use `aria-hidden="true"` on the visual icon element itself, and include distinct `focus:` utility classes (like `focus:ring-2`) to provide clear visual feedback during keyboard navigation.
