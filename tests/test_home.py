@@ -3,7 +3,24 @@ from starlette.testclient import TestClient
 from app.main import app
 
 
-def test_home_store_filter_checkboxes():
+from unittest.mock import patch
+
+from unittest.mock import patch, MagicMock
+
+@patch("app.main._build_home_context")
+def test_home_store_filter_checkboxes(mock_context):
+    mock_context.return_value = {
+        "has_data": True,
+        "active_store_badges": [{"name": "ALDI", "flyer_url": "#"}],
+        "top_overall": [{"store_name": "ALDI", "category": "Test", "item_name": "Test", "description": "Test", "sale_price": "$1", "score": 10}],
+        "deals_by_category": {"Test": [{"store_name": "ALDI", "category": "Test", "item_name": "Test", "description": "Test", "sale_price": "$1", "score": 10}]}, "has_data": True,
+        "best_store": {"store_name": "ALDI", "score": 10, "summary": "Great", "strengths": "Price", "weaknesses": "None"},
+        "seasonal_guide": None,
+        "recipe_idea": None,
+        "latest_run": None,
+        "store_colors": {},
+        "store_flyers": {}
+    }
     client = TestClient(app)
     response = client.get("/")
     assert response.status_code == 200

@@ -159,23 +159,48 @@ def test_events_wheel_includes_upcoming_movies():
     assert "winner-ticket-link" in response.text
 
 
-def test_upcoming_wheel_movies_filters_and_caps():
+from unittest.mock import patch
+import datetime
+
+@patch("app.main.get_active_movie_datasets")
+def test_upcoming_wheel_movies_filters_and_caps(mock_datasets):
     """Verify activity wheel movies strictly bound showtimes within 2.5h, deduplicate, and cap at 8."""
     import zoneinfo
     from app.main import _get_upcoming_wheel_movies
     from app.database import get_db
-    from app.store_utils import get_active_movie_datasets
 
     db = next(get_db())
     tz = zoneinfo.ZoneInfo("America/New_York")
-    active = get_active_movie_datasets(db)
-    if active and active[0].flyer_start_date:
-        ref_time = datetime.datetime.combine(active[0].flyer_start_date, datetime.time(16, 15), tzinfo=tz)
-    else:
-        ref_time = datetime.datetime.now(tz).replace(hour=16, minute=15, second=0, microsecond=0)
+    ref_time = datetime.datetime.now(tz).replace(hour=16, minute=15, second=0, microsecond=0)
+
+    # Mock datasets to ensure movies exist within the timeframe
+    class MockDeal:
+        def __init__(self, id, name, times):
+            self.id = id
+            self.item_name = name
+            self.description = "Tickets: url"
+            self.item_type = ""
+            self.category = ""
+            # _get_upcoming_wheel_movies reads deal.sale_price for raw times
+            self.sale_price = ", ".join(times)
+
+    class MockDataset:
+        def __init__(self):
+            self.store_name = "greenfield_garden_cinemas"
+            self.flyer_start_date = ref_time.date()
+            self.flyer_end_date = ref_time.date()
+            # Times format expected: 4:30 PM, 5:00 PM, 6:00 PM, etc
+            times = [(ref_time + datetime.timedelta(hours=i*0.5)).strftime("%I:%M %p").lstrip("0") for i in range(1, 15)]
+            self.deals = [MockDeal(i, f"Movie {i}", times) for i in range(1, 15)]
+
+    mock_datasets.return_value = [MockDataset()]
 
     # Within 2.5 hours, capped at 8
-    movies = _get_upcoming_wheel_movies(db, today=ref_time.date(), max_hours_ahead=2.5, max_movies=8, now_ref=ref_time)
+    # _get_upcoming_wheel_movies imports get_active_movie_datasets locally from app.store_utils
+    # so we must mock it at app.main.get_active_movie_datasets
+    with patch("app.store_utils.get_active_movie_datasets", return_value=[MockDataset()]):
+        movies = _get_upcoming_wheel_movies(db, today=ref_time.date(), max_hours_ahead=2.5, max_movies=8, now_ref=ref_time)
+
     assert 0 < len(movies) <= 8
 
     # All returned movies must have showtimes within the allowed window
