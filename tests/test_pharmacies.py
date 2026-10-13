@@ -296,8 +296,49 @@ async def test_analyze_pharmacy_deals_mock():
     assert all(cat in result["deals_by_category"] for cat in PHARMACY_CATEGORIES)
 
 
-def test_pharmacies_route_ai_sections():
+from unittest.mock import patch
+
+from unittest.mock import patch, MagicMock
+
+@patch("app.main._get_pharmacy_analysis")
+@patch("app.store_utils.get_active_pharmacy_datasets")
+def test_pharmacies_route_ai_sections(mock_datasets, mock_analysis):
     """Verify /pharmacies renders AI top deals, department sections, and best store value summary."""
+    class MockStoreInfo:
+        def __init__(self):
+            self.badge_color = "bg-teal-600"
+            self.circular_url = "#"
+
+    class MockDeal:
+        def __init__(self):
+            self.store_name = "cvs_greenfield"
+            self.category = "Health & Medicine"
+            self.item_name = "Test Medicine"
+            self.description = "Test Desc"
+            self.sale_price = "$1.00"
+            self.score = 10
+            self.explanation = "Great deal"
+            self.scraper_key = "cvs_greenfield"
+            self.image_url = None
+            self.flyer_end = "2026-10-15"
+            self.store_info = MockStoreInfo()
+
+    class MockDataset:
+        def __init__(self):
+            self.store_name = "CVS"
+            self.scraper_key = "cvs_greenfield"
+            self.flyer_start_date = None
+            self.flyer_end_date = None
+            self.deals = [MockDeal()]
+
+    mock_datasets.return_value = [MockDataset()]
+    mock_analysis.return_value = {
+        "scored_deals": [{"store_name": "CVS Pharmacy", "category": "Health & Medicine", "name": "Test Medicine", "description": "Test Desc", "price": "$1.00", "score": 10, "explanation": "Great deal", "scraper_key": "cvs_greenfield", "image_url": "", "store_info": MockStoreInfo()}],
+        "top_overall": [{"store_name": "CVS Pharmacy", "category": "Health & Medicine", "name": "Test Medicine", "description": "Test Desc", "price": "$1.00", "score": 10, "explanation": "Great deal", "scraper_key": "cvs_greenfield", "image_url": "", "store_info": MockStoreInfo()}],
+        "deals_by_category": {"Health & Medicine": [{"store_name": "CVS Pharmacy", "category": "Health & Medicine", "name": "Test Medicine", "description": "Test Desc", "price": "$1.00", "score": 10, "explanation": "Great deal", "scraper_key": "cvs_greenfield", "image_url": "", "store_info": MockStoreInfo()}]},
+        "best_pharmacy": {"store_name": "CVS Pharmacy", "score": 10, "summary": "Great", "strengths": "Price", "weaknesses": "None"}
+    }
+
     client = TestClient(app)
     response = client.get("/pharmacies")
     assert response.status_code == 200

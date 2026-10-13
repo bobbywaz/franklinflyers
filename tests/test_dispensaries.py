@@ -50,8 +50,32 @@ def test_categorize_weed():
     assert categorize_weed("Live Resin Sugar", "Concentrate 1g Chem Dog") == "Concentrates"
 
 
-def test_dispensaries_route_uncapped_and_zero_filler():
+from unittest.mock import patch
+
+from unittest.mock import patch, MagicMock
+
+@patch("app.store_utils.get_active_dispensary_datasets")
+def test_dispensaries_route_uncapped_and_zero_filler(mock_datasets):
     """Verify /dispensaries renders genuine deals uncapped without score <= 6 filler items."""
+
+    class MockDeal:
+        def __init__(self, item_name, description, sale_price, id):
+            self.item_name = item_name
+            self.description = description
+            self.sale_price = sale_price
+            self.id = id
+
+    class MockDataset:
+        def __init__(self):
+            self.store_name = "Test Store"
+            self.scraper_key = "test_store"
+            self.flyer_start_date = None
+            self.flyer_end_date = None
+            # BOGO -> 50% off -> score 10
+            self.deals = [MockDeal("Gummies BOGO Free", "Buy 1 Get 1 Free promotion", "$25.00", 1)]
+
+    mock_datasets.return_value = [MockDataset()]
+
     client = TestClient(app)
     response = client.get("/dispensaries")
     assert response.status_code == 200
