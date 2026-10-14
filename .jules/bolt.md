@@ -1,0 +1,3 @@
+## 2026-10-14 - Admin Page N+1 Query Optimization
+**Learning:** In the `_build_admin_context` function, checking the status of every scraper in a loop caused an N+1 query problem, making the admin dashboard load very slowly (2.2s for 50 scrapers). Doing database queries like `get_latest_attempt_by_key` inside the `manager.list_scrapers()` loop severely degraded performance.
+**Action:** Always use batched database queries with `sqlalchemy.func.max(id).group_by()` and dictionary lookups instead of individual queries when fetching the latest records for multiple entities (e.g., iterating over scrapers) to maintain fast page load times.
