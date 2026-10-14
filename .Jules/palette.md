@@ -1,0 +1,3 @@
+## 2024-11-20 - Semantic HTML and Screen Reader Accessibility in Forms and Buttons
+**Learning:** Forms missing explicit `id` and `for` associations between `<label>` and `<input>` elements break screen reader experiences, even if they visually appear correct. Similarly, icon-only buttons (like Play buttons) without `aria-label` or `aria-hidden` attributes on SVG icons result in uninformative labels being read out, providing a poor accessible experience.
+**Action:** Always ensure semantic accessibility standards are applied to forms (explicit `for`/`id` binding) and icon-only buttons (`aria-label` on buttons and `aria-hidden="true"` on inner visual icons) when designing or modifying UI components.
