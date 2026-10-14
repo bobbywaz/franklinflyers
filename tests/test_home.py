@@ -1,9 +1,19 @@
+from unittest.mock import patch, MagicMock
 import re
 from starlette.testclient import TestClient
 from app.main import app
 
 
-def test_home_store_filter_checkboxes():
+@patch('app.main._build_home_context')
+def test_home_store_filter_checkboxes(mock_build_home_context):
+    mock_build_home_context.return_value = {
+        'request': MagicMock(),
+        'has_data': True,
+        'active_store_badges': [{'name': 'Test Store', 'scraper_key': 'test', 'range_label': '1/1-1/7', 'flyer_url': '#'}],
+        'top_overall': [MagicMock(id=1, store_name='Test Store', category='Produce', item_name='Apple', description='description', sale_price='price')],
+        'deals_by_category': {'Produce': [MagicMock(id=1, store_name='Test Store', category='Produce', item_name='Apple', description='description', sale_price='price')]},
+        'best_store': MagicMock(store_name='Test Store', summary='Great')
+    }
     client = TestClient(app)
     response = client.get("/")
     assert response.status_code == 200

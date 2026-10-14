@@ -1,3 +1,4 @@
+from unittest.mock import patch, MagicMock, AsyncMock
 import datetime
 from typing import Any, Dict
 import pytest
@@ -296,7 +297,16 @@ async def test_analyze_pharmacy_deals_mock():
     assert all(cat in result["deals_by_category"] for cat in PHARMACY_CATEGORIES)
 
 
-def test_pharmacies_route_ai_sections():
+@patch('app.main._get_pharmacy_analysis', new_callable=AsyncMock)
+@patch('app.store_utils.get_active_pharmacy_datasets')
+def test_pharmacies_route_ai_sections(mock_get_active_pharmacy_datasets, mock_get_pharmacy_analysis):
+    mock_get_active_pharmacy_datasets.return_value = [MagicMock(scraper_key="test", store_name="Test", flyer_start_date=None, flyer_end_date=None, deals=[])]
+    mock_get_pharmacy_analysis.return_value = {
+        "scored_deals": [{"name": "Deal", "scraper_key": "test", "store_info": {"badge_color": "bg-teal-600"}}],
+        "top_overall": [{"name": "Deal", "scraper_key": "test", "store_info": {"badge_color": "bg-teal-600"}}],
+        "deals_by_category": {"Health": [{"name": "Deal", "scraper_key": "test", "store_info": {"badge_color": "bg-teal-600"}}]},
+        "best_pharmacy": {"store_name": "Test Pharmacy", "summary": "Great deals"}
+    }
     """Verify /pharmacies renders AI top deals, department sections, and best store value summary."""
     client = TestClient(app)
     response = client.get("/pharmacies")

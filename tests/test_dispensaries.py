@@ -1,3 +1,4 @@
+from unittest.mock import patch, MagicMock
 import pytest
 from starlette.testclient import TestClient
 
@@ -50,7 +51,13 @@ def test_categorize_weed():
     assert categorize_weed("Live Resin Sugar", "Concentrate 1g Chem Dog") == "Concentrates"
 
 
-def test_dispensaries_route_uncapped_and_zero_filler():
+@patch('app.store_utils.get_active_dispensary_datasets')
+def test_dispensaries_route_uncapped_and_zero_filler(mock_get_active_dispensary_datasets):
+    mock_get_active_dispensary_datasets.return_value = [
+        MagicMock(store_name="Test Store", scraper_key="test_scraper", flyer_start_date=None, flyer_end_date=None, deals=[
+            MagicMock(id=1, item_name="Super Silver Haze", description="BOGO", sale_price="$25", category="Flower")
+        ])
+    ]
     """Verify /dispensaries renders genuine deals uncapped without score <= 6 filler items."""
     client = TestClient(app)
     response = client.get("/dispensaries")

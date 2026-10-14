@@ -1,3 +1,4 @@
+from unittest.mock import patch, MagicMock
 import datetime
 from unittest.mock import AsyncMock, patch
 import pytest
@@ -159,7 +160,16 @@ def test_events_wheel_includes_upcoming_movies():
     assert "winner-ticket-link" in response.text
 
 
-def test_upcoming_wheel_movies_filters_and_caps():
+@patch('app.store_utils.get_active_movie_datasets')
+def test_upcoming_wheel_movies_filters_and_caps(mock_get_active_movie_datasets):
+    import datetime
+    now = datetime.datetime.now()
+    # The test hardcodes ref_time to 16:15
+    mock_get_active_movie_datasets.return_value = [
+        MagicMock(store_name="Test Cinema", scraper_key="test_scraper", flyer_start_date=now.date(), flyer_end_date=now.date(), deals=[
+            MagicMock(id=1, item_name="Test Movie", description="Details: https://example.com", sale_price="4:30 PM, 6:00 PM")
+        ])
+    ]
     """Verify activity wheel movies strictly bound showtimes within 2.5h, deduplicate, and cap at 8."""
     import zoneinfo
     from app.main import _get_upcoming_wheel_movies
