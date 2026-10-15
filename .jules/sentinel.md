@@ -1,0 +1,4 @@
+## 2025-02-12 - Plaintext Admin Password Storage Migration
+**Vulnerability:** The application was storing the `admin_password` in the `configurations` database table as plaintext. This means if the database was compromised, the admin password would be immediately readable, posing a CRITICAL security risk.
+**Learning:** Legacy configurations frequently hold unhashed passwords. When migrating plaintext secrets to a hashed format (like PBKDF2), you cannot rely on simple substring checks (like `"$" in string`) to determine if a string is hashed or plaintext, because a user might legally have `$` in their plaintext password.
+**Prevention:** Always implement an exact structural check when migrating. For PBKDF2, verify the exact length (e.g. 97 characters for `salt$hash`) and the exact position of the separator (e.g. `$`). Hash new and existing plaintext passwords, and compare hashes using constant-time comparison like `secrets.compare_digest` to prevent timing attacks.
