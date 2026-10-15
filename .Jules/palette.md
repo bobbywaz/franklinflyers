@@ -1,0 +1,3 @@
+## 2023-10-24 - Semantic Form Labels & ARIA-hidden Icons
+**Learning:** In the Franklin Flyers UI components, form inputs frequently lacked explicit `id` attributes linked to label `for` attributes, breaking screen reader association. Icon-only interactive elements (like the run scraper buttons) lacked `aria-label`s and did not explicitly hide decorative text/icons using `aria-hidden="true"`.
+**Action:** When updating form fields, always assign explicit `id`s and bind the labels using `for`. For icon-only interactive elements, ensure a descriptive `aria-label` is present and wrap the inner visual icon in `<span aria-hidden="true">` to prevent screen readers from reading confusing symbol characters aloud.
