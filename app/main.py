@@ -1,8 +1,10 @@
+import hashlib
 import json
 import logging
 import os
 import datetime
 import re
+import secrets
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
@@ -26,6 +28,26 @@ from .store_utils import (
     get_active_pharmacy_datasets,
     get_latest_attempt_by_key,
 )
+
+
+def get_password_hash(password: str) -> str:
+    """Generate a PBKDF2 hash for a password."""
+    salt = secrets.token_hex(16)
+    hash_obj = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000)
+    return f"{salt}${hash_obj.hex()}"
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a plain password against a PBKDF2 hash, or gracefully handle legacy plaintext."""
+    if not plain_password or not hashed_password:
+        return False
+    # Exact structural check: 32 hex chars (salt) + 1 '$' separator + 64 hex chars (hash) = 97 chars
+    if len(hashed_password) == 97 and hashed_password[32] == "$":
+        salt, stored_hash = hashed_password.split("$")
+        hash_obj = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt.encode("utf-8"), 100000)
+        return secrets.compare_digest(hash_obj.hex(), stored_hash)
+    # Legacy plaintext check
+    return secrets.compare_digest(plain_password, hashed_password)
 
 
 logging.basicConfig(level=logging.INFO)
@@ -56,9 +78,14 @@ async def startup_event():
     try:
         admin_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
         if not admin_pass:
-            db.add(Configuration(key="admin_password", value="changeme"))
+            db.add(Configuration(key="admin_password", value=get_password_hash("changeme")))
             db.commit()
-            logger.info("Initialized default admin password 'changeme'")
+            logger.info("Initialized default admin password")
+        elif len(admin_pass.value) != 97 or admin_pass.value[32] != "$":
+            # Migrate legacy plaintext password to PBKDF2 hash
+            admin_pass.value = get_password_hash(admin_pass.value)
+            db.commit()
+            logger.info("Migrated legacy plaintext admin password to PBKDF2 hash")
     finally:
         db.close()
 
@@ -1024,7 +1051,7 @@ async def admin_login(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     password = form.get("password")
     stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
-    if not stored_pass or password != stored_pass.value:
+    if not stored_pass or not verify_password(password, stored_pass.value):
         return templates.TemplateResponse(
             request=request,
             name="admin_login.html",
@@ -1105,11 +1132,11 @@ async def admin_change_password(request: Request, db: Session = Depends(get_db))
     if not stored_pass:
         context = _build_admin_context(request, db, error="Configuration error")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
-    if current_password != stored_pass.value:
+    if not verify_password(current_password, stored_pass.value):
         context = _build_admin_context(request, db, error="Invalid current password")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
 
-    stored_pass.value = new_password
+    stored_pass.value = get_password_hash(new_password)
     db.commit()
     context = _build_admin_context(request, db, message="Password updated successfully.")
     return templates.TemplateResponse(request=request, name="admin.html", context=context)
