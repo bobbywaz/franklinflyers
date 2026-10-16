@@ -1,0 +1,4 @@
+## 2025-02-14 - Fix Plaintext Password Storage and Migrate Hash Formats
+**Vulnerability:** Admin passwords were stored in plaintext in the database (Configuration model) and checked using insecure, standard equality string matching, making it vulnerable to both timing attacks and database compromise.
+**Learning:** When migrating from plaintext passwords to hashed formats, backwards compatibility requires fallback validation. Relying on simple substring checks (like `if "$" in hash`) to determine the format can lead to false positives if the plaintext password happens to contain a dollar sign, causing subsequent parsing to fail.
+**Prevention:** Implement exact structural checks (e.g., `len(hash) == 97 and hash[32] == "$"`) to robustly determine the format. Use `secrets.compare_digest` for *both* hash comparison and the plaintext fallback comparison to prevent timing attacks.
