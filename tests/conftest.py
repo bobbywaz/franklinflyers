@@ -1,7 +1,7 @@
 import pytest
-from app.database import init_db
+from app.database import Base, engine
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_database():
-    init_db()
+    Base.metadata.create_all(bind=engine)
     yield
