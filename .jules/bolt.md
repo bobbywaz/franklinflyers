@@ -1,0 +1,3 @@
+## 2025-02-18 - Eager Loading to Prevent N+1 Database Queries
+**Learning:** When retrieving `Run` entities to build contexts like `_build_home_context` and `_build_admin_context`, failure to eager-load related relationships triggers N+1 lazy-loading queries when those relations (e.g. `best_store`, `deals`, `published_stores.dataset`) are accessed downstream. This degrades database performance significantly as it causes subsequent queries in the context templates.
+**Action:** Use SQLAlchemy `joinedload` for one-to-one/many-to-one relations (e.g. `Run.best_store`, `PublishedSnapshotStore.dataset`) and `selectinload` for one-to-many/many-to-many relations (e.g. `Run.deals`, `Run.published_stores`) explicitly during the initial retrieval.
