@@ -1,0 +1,4 @@
+## 2025-02-23 - Strict Typing and Insecure Defaults for Auth
+**Vulnerability:** The application was storing plaintext passwords in the database upon initialization and validating them loosely. It was failing to hash them and also relying on strings instead of strict typings which could allow `None` to cause type errors, exposing unhandled backend exceptions.
+**Learning:** During password migration, it is critical to write tight structural validations (`len == 97` and char 32 is `$`) rather than loose substring matching. Also, FastAPI `form.get()` may return objects other than `str`, so explicit type casting is necessary. Finally, `secrets.compare_digest` must be used.
+**Prevention:** Next time when fixing auth or migrating data, explicitly assert type bounds and build defensive string parsing guards for structural matches. Utilize robust crypto functions to defend against timing attacks.
