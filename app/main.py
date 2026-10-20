@@ -9,6 +9,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -25,6 +26,7 @@ from .store_utils import (
     get_active_movie_datasets,
     get_active_pharmacy_datasets,
     get_latest_attempt_by_key,
+    utcnow,
 )
 
 
@@ -143,6 +145,50 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
     cards = []
     latest_published_datasets = [entry.dataset for entry in latest_run.published_stores if entry.dataset] if latest_run else []
 
+    scraper_keys = [e["scraper_key"] for e in manager.list_scrapers() if e["scraper_key"] not in ("full_run", "grocery_run")]
+
+    # Batch fetch latest attempts
+    latest_attempt_subq = db.query(
+        StoreDataset.scraper_key,
+        func.max(StoreDataset.id).label('max_id')
+    ).filter(StoreDataset.scraper_key.in_(scraper_keys)).group_by(StoreDataset.scraper_key).subquery()
+    latest_attempts = db.query(StoreDataset).join(
+        latest_attempt_subq,
+        (StoreDataset.scraper_key == latest_attempt_subq.c.scraper_key) &
+        (StoreDataset.id == latest_attempt_subq.c.max_id)
+    ).all()
+    latest_attempts_by_key = {d.scraper_key: d for d in latest_attempts}
+
+    # Batch fetch latest successes
+    latest_success_subq = db.query(
+        StoreDataset.scraper_key,
+        func.max(StoreDataset.id).label('max_id')
+    ).filter(StoreDataset.scraper_key.in_(scraper_keys), StoreDataset.status == STATUS_SUCCESS).group_by(StoreDataset.scraper_key).subquery()
+    latest_successes = db.query(StoreDataset).join(
+        latest_success_subq,
+        (StoreDataset.scraper_key == latest_success_subq.c.scraper_key) &
+        (StoreDataset.id == latest_success_subq.c.max_id)
+    ).all()
+    latest_successes_by_key = {d.scraper_key: d for d in latest_successes}
+
+    # Batch fetch active datasets
+    now = utcnow()
+    active_dataset_subq = db.query(
+        StoreDataset.scraper_key,
+        func.max(StoreDataset.id).label('max_id')
+    ).filter(
+        StoreDataset.scraper_key.in_(scraper_keys),
+        StoreDataset.status == STATUS_SUCCESS,
+        StoreDataset.expires_at != None,
+        StoreDataset.expires_at >= now
+    ).group_by(StoreDataset.scraper_key).subquery()
+    active_datasets = db.query(StoreDataset).join(
+        active_dataset_subq,
+        (StoreDataset.scraper_key == active_dataset_subq.c.scraper_key) &
+        (StoreDataset.id == active_dataset_subq.c.max_id)
+    ).all()
+    active_datasets_by_key = {d.scraper_key: d for d in active_datasets}
+
     for entry in manager.list_scrapers():
         scraper_key = entry["scraper_key"]
         if scraper_key in ("full_run", "grocery_run"):
@@ -163,9 +209,9 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
             )
             continue
 
-        latest_attempt = get_latest_attempt_by_key(db, scraper_key)
-        latest_success = _latest_success_by_key(db, scraper_key)
-        active_dataset = get_active_dataset_by_key(db, scraper_key)
+        latest_attempt = latest_attempts_by_key.get(scraper_key)
+        latest_success = latest_successes_by_key.get(scraper_key)
+        active_dataset = active_datasets_by_key.get(scraper_key)
 
         if active_dataset:
             public_status = "Active"
