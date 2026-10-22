@@ -1,0 +1,3 @@
+## 2025-02-23 - Prevent N+1 queries in SQLAlchemy
+**Learning:** When querying models with relationships (like `Run` in `_build_home_context` and `_build_admin_context`), SQLAlchemy uses lazy loading by default, causing N+1 query problems. Use `joinedload()` for scalar relationships (like `best_store`) and `selectinload()` for collection relationships (like `deals` or `published_stores`) to avoid this and memory explosions from Cartesian products.
+**Action:** Always inspect SQLAlchemy queries for implicit lazy loading of relationships and proactively add explicit loading strategies (`selectinload` or `joinedload`) when related objects are accessed in a loop.
