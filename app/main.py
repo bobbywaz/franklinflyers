@@ -3,6 +3,8 @@ import logging
 import os
 import datetime
 import re
+import hashlib
+import secrets
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
@@ -48,6 +50,30 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
+def get_password_hash(password: str) -> str:
+    """Generate a PBKDF2 password hash."""
+    salt = secrets.token_hex(16)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100000)
+    return f"pbkdf2:sha256:100000${salt}${key.hex()}"
+
+
+def verify_password(plain_password: Optional[str], hashed_password: str) -> bool:
+    """Verify a password against its PBKDF2 hash, falling back to plaintext for old DBs."""
+    if not plain_password:
+        return False
+
+    # Allow legacy plaintext password for initial backward compatibility or "changeme"
+    if not hashed_password.startswith("pbkdf2:sha256:100000$"):
+        return secrets.compare_digest(plain_password, hashed_password)
+
+    try:
+        _, _, _, salt, key = hashed_password.split("$", 2)[0].split(":") + hashed_password.split("$")[1:]
+        check_key = hashlib.pbkdf2_hmac("sha256", plain_password.encode(), salt.encode(), 100000)
+        return secrets.compare_digest(check_key.hex(), key)
+    except Exception:
+        return False
+
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
@@ -56,7 +82,7 @@ async def startup_event():
     try:
         admin_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
         if not admin_pass:
-            db.add(Configuration(key="admin_password", value="changeme"))
+            db.add(Configuration(key="admin_password", value=get_password_hash("changeme")))
             db.commit()
             logger.info("Initialized default admin password 'changeme'")
     finally:
@@ -1022,9 +1048,11 @@ async def admin_login_page(request: Request):
 @app.post("/admin/login", response_class=HTMLResponse)
 async def admin_login(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
-    password = form.get("password")
+    password_field = form.get("password")
+    password = password_field if isinstance(password_field, str) else None
+
     stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
-    if not stored_pass or password != stored_pass.value:
+    if not stored_pass or not verify_password(password, stored_pass.value):
         return templates.TemplateResponse(
             request=request,
             name="admin_login.html",
@@ -1098,18 +1126,23 @@ async def admin_change_password(request: Request, db: Session = Depends(get_db))
         return redirect
 
     form = await request.form()
-    current_password = form.get("current_password")
-    new_password = form.get("new_password")
+    current_field = form.get("current_password")
+    new_field = form.get("new_password")
+    current_password = current_field if isinstance(current_field, str) else None
+    new_password = new_field if isinstance(new_field, str) else None
 
     stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
     if not stored_pass:
         context = _build_admin_context(request, db, error="Configuration error")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
-    if current_password != stored_pass.value:
+    if not current_password or not verify_password(current_password, stored_pass.value):
         context = _build_admin_context(request, db, error="Invalid current password")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
+    if not new_password:
+        context = _build_admin_context(request, db, error="New password is required")
+        return templates.TemplateResponse(request=request, name="admin.html", context=context)
 
-    stored_pass.value = new_password
+    stored_pass.value = get_password_hash(new_password)
     db.commit()
     context = _build_admin_context(request, db, message="Password updated successfully.")
     return templates.TemplateResponse(request=request, name="admin.html", context=context)
