@@ -1,0 +1,4 @@
+## 2024-05-18 - [Fix Plaintext Admin Password Storage]
+**Vulnerability:** The application was storing the `admin_password` configuration value in plaintext in the database (defaulting to "changeme" during setup) and directly comparing user input to this plaintext value during login and password changes. This is a critical risk as any database exposure would instantly leak the administrative credentials.
+**Learning:** Hardcoded/plaintext passwords in simple SQLite architectures are often overlooked during early development phases. Adding cryptographic hashing requires migrating existing configurations properly without locking out valid users.
+**Prevention:** Always use a secure hashing algorithm (like PBKDF2, bcrypt, or Argon2) when storing passwords. Ensure to implement a migration path for legacy plaintext hashes where needed (e.g., re-hashing plaintext upon successful validation).
