@@ -32,4 +32,4 @@ jobs:
 
       - name: Run pytest test suite
         run: |
-          pytest -v
+          FLARESOLVERR_URL=http://127.0.0.1:1 PYTHONPATH=. pytest -v
