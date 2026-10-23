@@ -159,20 +159,49 @@ def test_events_wheel_includes_upcoming_movies():
     assert "winner-ticket-link" in response.text
 
 
+
+
 def test_upcoming_wheel_movies_filters_and_caps():
     """Verify activity wheel movies strictly bound showtimes within 2.5h, deduplicate, and cap at 8."""
     import zoneinfo
+    import datetime
     from app.main import _get_upcoming_wheel_movies
-    from app.database import get_db
-    from app.store_utils import get_active_movie_datasets
+    from app.database import Base, engine, SessionLocal
+    from app.models import StoreDataset, StoreDeal
+    from app.store_utils import utcnow
 
-    db = next(get_db())
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+
     tz = zoneinfo.ZoneInfo("America/New_York")
-    active = get_active_movie_datasets(db)
-    if active and active[0].flyer_start_date:
-        ref_time = datetime.datetime.combine(active[0].flyer_start_date, datetime.time(16, 15), tzinfo=tz)
-    else:
-        ref_time = datetime.datetime.now(tz).replace(hour=16, minute=15, second=0, microsecond=0)
+    ref_time = datetime.datetime.now(tz).replace(hour=16, minute=15, second=0, microsecond=0)
+
+    ds = StoreDataset(
+        scraper_key="test_movie_venue",
+        store_name="Test Cinema",
+        kind="movie",
+        trigger_mode="manual_test",
+        status="success",
+        started_at=utcnow(),
+        finished_at=utcnow(),
+        expires_at=utcnow() + datetime.timedelta(days=3),
+        flyer_start_date=ref_time.date(),
+        flyer_end_date=ref_time.date(),
+        item_count=1,
+        items_scraped_count=1,
+    )
+    db.add(ds)
+    db.commit()
+
+    # Needs to fall inside the 2.5 hr window from ref_time (16:15 -> 4:15 PM)
+    deal = StoreDeal(
+        dataset_id=ds.id,
+        item_name="Spider-Man Test",
+        sale_price="5:00 PM, 6:00 PM",
+        description="Tickets: http://test.com",
+    )
+    db.add(deal)
+    db.commit()
 
     # Within 2.5 hours, capped at 8
     movies = _get_upcoming_wheel_movies(db, today=ref_time.date(), max_hours_ahead=2.5, max_movies=8, now_ref=ref_time)
