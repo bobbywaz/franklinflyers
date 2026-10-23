@@ -1,4 +1,6 @@
 import pytest
+import datetime
+
 from starlette.testclient import TestClient
 
 from app.database import Base, SessionLocal, engine
@@ -52,6 +54,35 @@ def test_categorize_weed():
 
 def test_dispensaries_route_uncapped_and_zero_filler():
     """Verify /dispensaries renders genuine deals uncapped without score <= 6 filler items."""
+
+    # Mock data so page renders deals instead of empty state
+    db = SessionLocal()
+    import datetime
+    now = utcnow()
+    ds = StoreDataset(
+        scraper_key="patriot_care",
+        store_name="Patriot Care",
+        kind="dispensary",
+        trigger_mode="manual_test",
+        status="success",
+        started_at=now,
+        finished_at=now,
+        expires_at=now + datetime.timedelta(days=3),
+        item_count=1,
+        items_scraped_count=1,
+    )
+    db.add(ds)
+    db.commit()
+
+    deal1 = StoreDeal(
+        dataset_id=ds.id,
+        item_name="BOGO Gummies",
+        sale_price="$25.00",
+        description="Buy 1 Get 1 Free promotion",
+    )
+    db.add(deal1)
+    db.commit()
+
     client = TestClient(app)
     response = client.get("/dispensaries")
     assert response.status_code == 200

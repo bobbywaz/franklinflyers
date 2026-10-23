@@ -2,8 +2,59 @@ import re
 from starlette.testclient import TestClient
 from app.main import app
 
-
 def test_home_store_filter_checkboxes():
+    # Insert mock data to render the blocks
+    from app.database import Base, SessionLocal, engine
+    Base.metadata.create_all(bind=engine)
+    from app.models import StoreDataset, Run, Deal, PublishedSnapshotStore
+    from app.store_utils import utcnow
+    import datetime
+
+    db = SessionLocal()
+    now = utcnow()
+    ds = StoreDataset(
+        scraper_key="ALDI",
+        store_name="ALDI",
+        kind="grocery",
+        trigger_mode="manual_test",
+        status="success",
+        started_at=now,
+        finished_at=now,
+        expires_at=now + datetime.timedelta(days=3),
+        item_count=1,
+        items_scraped_count=1,
+    )
+    db.add(ds)
+    db.commit()
+
+    run = Run(
+        run_date=now,
+        is_ready=True,
+    )
+    db.add(run)
+    db.commit()
+
+    deal = Deal(
+        run_id=run.id,
+        store_name="ALDI",
+        item_name="Eggs",
+        sale_price="$2.99",
+        description="Dozen eggs",
+        category="Dairy",
+        score=9
+    )
+    db.add(deal)
+
+    pub_store = PublishedSnapshotStore(
+        run_id=run.id,
+        store_dataset_id=ds.id,
+        scraper_key="ALDI",
+        store_name="ALDI"
+    )
+    db.add(pub_store)
+    db.commit()
+
+
     client = TestClient(app)
     response = client.get("/")
     assert response.status_code == 200
