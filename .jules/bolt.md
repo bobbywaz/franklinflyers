@@ -1,0 +1,3 @@
+## 2024-10-24 - SQLAlchemy N+1 Queries in Context Builders
+**Learning:** In the Franklin Flyers project, context builders (`_build_home_context`, `_build_admin_context`) were performing lazy loads on relationships (`deals`, `published_stores`, `best_store`), resulting in large N+1 queries. Using `selectinload` for collections and `joinedload` for scalars drops the number of queries significantly (e.g. 82 down to 3 for admin).
+**Action:** When querying the `Run` model in SQLAlchemy context builders, always explicitly load related objects using `joinedload()` for scalar relationships and `selectinload()` for collection relationships to avoid N+1 queries.
