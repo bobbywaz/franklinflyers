@@ -9,13 +9,14 @@ from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload, joinedload
 from starlette.middleware.sessions import SessionMiddleware
 
+from sqlalchemy import func
 from .database import SessionLocal, get_db, init_db
 from .gemini_analyzer import GeminiAnalyzer, PHARMACY_CATEGORIES
 from .manager import ScraperManager
-from .models import Configuration, Run, StoreDataset
+from .models import Configuration, Run, StoreDataset, PublishedSnapshotStore
 from .scheduler import run_full_scrape, run_grocery_scrape, run_single_scrape, start_scheduler
 from .store_utils import (
     STATUS_SUCCESS,
@@ -82,7 +83,7 @@ def _latest_success_by_key(db: Session, scraper_key: str) -> Optional[StoreDatas
 
 
 def _build_home_context(request: Request, db: Session):
-    latest_run = db.query(Run).filter(Run.is_ready == True).order_by(Run.run_date.desc()).first()
+    latest_run = db.query(Run).options(joinedload(Run.best_store), selectinload(Run.deals)).filter(Run.is_ready == True).order_by(Run.run_date.desc()).first()
     active_grocery_datasets = get_active_grocery_datasets(db)
     active_store_names = {dataset.store_name for dataset in active_grocery_datasets}
 
@@ -139,9 +140,35 @@ def _build_home_context(request: Request, db: Session):
 
 def _build_admin_context(request: Request, db: Session, message: str = None, error: str = None):
     manager = ScraperManager()
-    latest_run = db.query(Run).filter(Run.is_ready == True).order_by(Run.run_date.desc()).first()
+    latest_run = db.query(Run).options(selectinload(Run.deals), selectinload(Run.published_stores).joinedload(PublishedSnapshotStore.dataset)).filter(Run.is_ready == True).order_by(Run.run_date.desc()).first()
     cards = []
     latest_published_datasets = [entry.dataset for entry in latest_run.published_stores if entry.dataset] if latest_run else []
+
+    # Batch queries for all scrapers
+    from .store_utils import utcnow
+    now_dt = utcnow()
+
+    # Get latest attempts by grouping
+    latest_attempt_ids = db.query(func.max(StoreDataset.id)).group_by(StoreDataset.scraper_key).all()
+    latest_attempt_ids = [r[0] for r in latest_attempt_ids]
+    latest_attempts = db.query(StoreDataset).filter(StoreDataset.id.in_(latest_attempt_ids)).all() if latest_attempt_ids else []
+    latest_attempt_by_key = {d.scraper_key: d for d in latest_attempts}
+
+    # Get latest successes
+    latest_success_ids = db.query(func.max(StoreDataset.id)).filter(StoreDataset.status == STATUS_SUCCESS).group_by(StoreDataset.scraper_key).all()
+    latest_success_ids = [r[0] for r in latest_success_ids]
+    latest_successes = db.query(StoreDataset).filter(StoreDataset.id.in_(latest_success_ids)).all() if latest_success_ids else []
+    latest_success_by_key = {d.scraper_key: d for d in latest_successes}
+
+    # Get active datasets (success and not expired)
+    active_dataset_ids = db.query(func.max(StoreDataset.id)).filter(
+        StoreDataset.status == STATUS_SUCCESS,
+        StoreDataset.expires_at != None,
+        StoreDataset.expires_at >= now_dt
+    ).group_by(StoreDataset.scraper_key).all()
+    active_dataset_ids = [r[0] for r in active_dataset_ids]
+    active_datasets = db.query(StoreDataset).filter(StoreDataset.id.in_(active_dataset_ids)).all() if active_dataset_ids else []
+    active_dataset_by_key = {d.scraper_key: d for d in active_datasets}
 
     for entry in manager.list_scrapers():
         scraper_key = entry["scraper_key"]
@@ -163,9 +190,9 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
             )
             continue
 
-        latest_attempt = get_latest_attempt_by_key(db, scraper_key)
-        latest_success = _latest_success_by_key(db, scraper_key)
-        active_dataset = get_active_dataset_by_key(db, scraper_key)
+        latest_attempt = latest_attempt_by_key.get(scraper_key)
+        latest_success = latest_success_by_key.get(scraper_key)
+        active_dataset = active_dataset_by_key.get(scraper_key)
 
         if active_dataset:
             public_status = "Active"
