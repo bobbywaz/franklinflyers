@@ -1,6 +1,8 @@
+import hashlib
 import json
 import logging
 import os
+import secrets
 import datetime
 import re
 from typing import Dict, List, Optional, Tuple
@@ -48,6 +50,26 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
+def get_password_hash(password: str) -> str:
+    salt = secrets.token_hex(16)
+    hash_obj = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000)
+    return f"pbkdf2:sha256:100000${salt}${hash_obj.hex()}"
+
+
+def verify_password(plain_password: Optional[str], hashed_password: str) -> bool:
+    if plain_password is None:
+        return False
+    if not hashed_password.startswith("pbkdf2:sha256:100000$"):
+        return plain_password == hashed_password
+    parts = hashed_password.split("$")
+    if len(parts) != 3:
+        return False
+    salt = parts[1]
+    expected_hash = parts[2]
+    hash_obj = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt.encode("utf-8"), 100000)
+    return secrets.compare_digest(hash_obj.hex(), expected_hash)
+
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
@@ -56,9 +78,10 @@ async def startup_event():
     try:
         admin_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
         if not admin_pass:
-            db.add(Configuration(key="admin_password", value="changeme"))
+            hashed_pass = get_password_hash("changeme")
+            db.add(Configuration(key="admin_password", value=hashed_pass))
             db.commit()
-            logger.info("Initialized default admin password 'changeme'")
+            logger.info("Initialized default admin password 'changeme' (hashed)")
     finally:
         db.close()
 
@@ -1022,9 +1045,11 @@ async def admin_login_page(request: Request):
 @app.post("/admin/login", response_class=HTMLResponse)
 async def admin_login(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
-    password = form.get("password")
+    raw_password = form.get("password")
+    password = str(raw_password) if isinstance(raw_password, str) else None
+
     stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
-    if not stored_pass or password != stored_pass.value:
+    if not stored_pass or not verify_password(password, stored_pass.value):
         return templates.TemplateResponse(
             request=request,
             name="admin_login.html",
@@ -1098,18 +1123,23 @@ async def admin_change_password(request: Request, db: Session = Depends(get_db))
         return redirect
 
     form = await request.form()
-    current_password = form.get("current_password")
-    new_password = form.get("new_password")
+    raw_current = form.get("current_password")
+    raw_new = form.get("new_password")
+    current_password = str(raw_current) if isinstance(raw_current, str) else None
+    new_password = str(raw_new) if isinstance(raw_new, str) else None
 
     stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
     if not stored_pass:
         context = _build_admin_context(request, db, error="Configuration error")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
-    if current_password != stored_pass.value:
+    if not verify_password(current_password, stored_pass.value):
         context = _build_admin_context(request, db, error="Invalid current password")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
+    if not new_password:
+        context = _build_admin_context(request, db, error="New password cannot be empty")
+        return templates.TemplateResponse(request=request, name="admin.html", context=context)
 
-    stored_pass.value = new_password
+    stored_pass.value = get_password_hash(new_password)
     db.commit()
     context = _build_admin_context(request, db, message="Password updated successfully.")
     return templates.TemplateResponse(request=request, name="admin.html", context=context)
