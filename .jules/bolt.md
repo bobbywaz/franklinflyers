@@ -1,0 +1,3 @@
+## 2024-05-15 - Batched active datasets queries & N+1 relations
+**Learning:** The database queries for `latest_run` in `_build_home_context` and `_build_admin_context` were causing N+1 queries when accessing nested relationships (e.g. `latest_run.deals`, `latest_run.best_store`, `latest_run.published_stores[i].dataset`). Eager loading fixes this bottleneck.
+**Action:** Use `joinedload` for singular relationships (`best_store`) and `selectinload` for collection relationships (`deals`, `published_stores`) or nested paths (`selectinload(Run.published_stores).joinedload(...)`) to minimize queries when retrieving parent entities.
