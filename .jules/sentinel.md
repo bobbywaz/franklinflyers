@@ -1,0 +1,4 @@
+## 2024-05-14 - Plaintext Admin Password Storage Migration
+**Vulnerability:** Admin passwords were being stored in the database in plaintext and verified using simple string comparison, a critical security risk.
+**Learning:** Legacy projects often store simple configurations (like "admin_password") in plaintext strings. When updating to securely hashed formats (like PBKDF2), the startup lifecycle needs a way to detect and seamlessly migrate existing plaintext passwords to hashes to avoid locking out existing users. Using a clear prefix like "pbkdf2:sha256:100000$" ensures we can safely differentiate hashes from legacy strings during migration.
+**Prevention:** Always implement password hashing (e.g., using `hashlib.pbkdf2_hmac` and random salts) when initially storing passwords in configuration tables, even for local or admin default passwords. Never store user credentials in plaintext configuration values.
