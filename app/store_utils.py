@@ -5,6 +5,7 @@ import re
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
 from .models import PublishedSnapshotStore, Run, StoreDataset
 
@@ -258,8 +259,10 @@ def active_dataset_subquery(db, kind: str, now: Optional[datetime.datetime] = No
 
 def get_active_grocery_datasets(db, now: Optional[datetime.datetime] = None) -> List[StoreDataset]:
     subquery = active_dataset_subquery(db, GROCERY_KIND, now)
+    # ⚡ Bolt: Eager load deals to prevent N+1 queries when iterating through datasets
     return (
         db.query(StoreDataset)
+        .options(selectinload(StoreDataset.deals))
         .join(
             subquery,
             (StoreDataset.scraper_key == subquery.c.scraper_key)
@@ -272,8 +275,10 @@ def get_active_grocery_datasets(db, now: Optional[datetime.datetime] = None) -> 
 
 def get_active_dispensary_datasets(db, now: Optional[datetime.datetime] = None) -> List[StoreDataset]:
     subquery = active_dataset_subquery(db, "dispensary", now)
+    # ⚡ Bolt: Eager load deals to prevent N+1 queries when iterating through datasets
     return (
         db.query(StoreDataset)
+        .options(selectinload(StoreDataset.deals))
         .join(
             subquery,
             (StoreDataset.scraper_key == subquery.c.scraper_key)
@@ -286,8 +291,10 @@ def get_active_dispensary_datasets(db, now: Optional[datetime.datetime] = None) 
 
 def get_active_event_datasets(db, now: Optional[datetime.datetime] = None) -> List[StoreDataset]:
     subquery = active_dataset_subquery(db, "event", now)
+    # ⚡ Bolt: Eager load deals to prevent N+1 queries when iterating through datasets
     return (
         db.query(StoreDataset)
+        .options(selectinload(StoreDataset.deals))
         .join(
             subquery,
             (StoreDataset.scraper_key == subquery.c.scraper_key)
@@ -315,8 +322,10 @@ def get_active_movie_datasets(db, now: Optional[datetime.datetime] = None) -> Li
         List of active StoreDataset instances with kind="movie".
     """
     subquery = active_dataset_subquery(db, "movie", now)
+    # ⚡ Bolt: Eager load deals to prevent N+1 queries when iterating through datasets
     return (
         db.query(StoreDataset)
+        .options(selectinload(StoreDataset.deals))
         .join(
             subquery,
             (StoreDataset.scraper_key == subquery.c.scraper_key)
@@ -341,8 +350,10 @@ def get_active_pharmacy_datasets(db, now: Optional[datetime.datetime] = None) ->
         List of active StoreDataset instances with kind="pharmacy".
     """
     subquery = active_dataset_subquery(db, "pharmacy", now)
+    # ⚡ Bolt: Eager load deals to prevent N+1 queries when iterating through datasets
     return (
         db.query(StoreDataset)
+        .options(selectinload(StoreDataset.deals))
         .join(
             subquery,
             (StoreDataset.scraper_key == subquery.c.scraper_key)
