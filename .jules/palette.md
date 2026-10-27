@@ -1,0 +1,3 @@
+## 2024-10-27 - Focus Ring Accessibility
+**Learning:** Tailwind CSS components in this project often use `focus:outline-none` but fail to add replacement visible focus indicators (like `focus:ring`), or use `focus:ring-0` to suppress focus rings entirely. This breaks keyboard navigation for interactive elements like filter buttons and links.
+**Action:** Always ensure interactive elements with `focus:outline-none` have an alternative visible focus indicator (e.g., `focus:ring-1 focus:ring-indigo-400`). Replace `focus:ring-0` on inputs (like checkboxes) with accessible focus states (e.g., `focus:ring-2 focus:ring-blue-500`).

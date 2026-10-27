@@ -56,15 +56,15 @@
                 <div class="flex items-center justify-end gap-2 mb-1.5">
                     <p class="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Current Store Flyers</p>
                     <span class="text-gray-600 text-[10px]">•</span>
-                    <button type="button" id="select-all-stores" class="text-[10px] text-blue-400 hover:text-blue-300 font-semibold focus:outline-none transition-colors">All</button>
+                    <button type="button" id="select-all-stores" class="text-[10px] text-blue-400 hover:text-blue-300 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-400 rounded transition-colors">All</button>
                     <span class="text-gray-600 text-[10px]">•</span>
-                    <button type="button" id="deselect-all-stores" class="text-[10px] text-gray-400 hover:text-gray-300 font-semibold focus:outline-none transition-colors">None</button>
+                    <button type="button" id="deselect-all-stores" class="text-[10px] text-gray-400 hover:text-gray-300 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-400 rounded transition-colors">None</button>
                 </div>
                 <div class="flex flex-wrap justify-end gap-2 mb-3" id="store-filters">
                     {% for badge in active_store_badges %}
                     <div class="inline-flex items-center bg-slate-800/90 border border-slate-700/80 rounded-full pl-2.5 pr-1 py-1 shadow-sm gap-2 transition-all store-filter-pill" data-store="{{ badge.name }}">
                         <label class="inline-flex items-center cursor-pointer select-none" title="Toggle {{ badge.name }} listings">
-                            <input type="checkbox" checked value="{{ badge.name }}" data-store-checkbox="{{ badge.name }}" class="store-checkbox rounded text-blue-600 bg-gray-900 border-gray-500 focus:ring-0 focus:ring-offset-0 h-4 w-4 cursor-pointer">
+                            <input type="checkbox" checked value="{{ badge.name }}" data-store-checkbox="{{ badge.name }}" class="store-checkbox rounded text-blue-600 bg-gray-900 border-gray-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-gray-900 focus:ring-offset-2 h-4 w-4 cursor-pointer">
                         </label>
                         <a href="{{ badge.flyer_url }}" target="_blank" class="{{ store_colors.get(badge.name, 'bg-slate-700') }} text-white rounded-full px-3 py-1 text-[10px] font-bold shadow-md hover:brightness-110 transition-all store-badge" title="Open {{ badge.name }} weekly flyer in new tab">
                             {{ badge.name }}{% if badge.range_label %} {{ badge.range_label }}{% endif %}
