@@ -1,0 +1,3 @@
+## 2024-05-24 - SQLAlchemy N+1 Queries
+**Learning:** In a FastAPI/SQLAlchemy app with many interrelated models (e.g. Run -> Deals, Run -> PublishedSnapshotStore, StoreDataset -> Deals), accessing relationship attributes (like iterating through Deals for a Dataset) triggers N+1 implicit lazy queries. This is a severe bottleneck in data-heavy route handlers.
+**Action:** Always use eager loading explicitly. Use `.options(joinedload(Model.relation))` for single scalar relationships (Many-to-One / One-to-One) and `.options(selectinload(Model.collection))` for collection/nested relationships (One-to-Many).
