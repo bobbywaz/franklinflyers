@@ -148,7 +148,7 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
     manager = ScraperManager()
     latest_run = (
         db.query(Run)
-        .options(selectinload(Run.published_stores).selectinload(PublishedSnapshotStore.dataset))
+        .options(selectinload(Run.published_stores).joinedload(PublishedSnapshotStore.dataset))
         .options(selectinload(Run.deals))
         .filter(Run.is_ready == True)
         .order_by(Run.run_date.desc())
