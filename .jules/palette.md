@@ -1,0 +1,3 @@
+## 2024-05-19 - Adding Focus Rings to Tailwind Reset Elements
+**Learning:** Tailwind's base reset removes native focus outlines `outline: 2px solid transparent` and the developer had added `focus:outline-none` or `focus:ring-0` to buttons and checkboxes, making them completely invisible to keyboard users. When building interactive elements, especially icon-only buttons or custom checkboxes, always include explicit `focus-visible:ring-2` or `focus:ring-2` classes to ensure keyboard navigation remains accessible.
+**Action:** When working on UX improvements, explicitly search for `focus:outline-none` and `focus:ring-0` in templates and replace them with visible focus rings like `focus-visible:ring-2 focus-visible:ring-blue-500`.
