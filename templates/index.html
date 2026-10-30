@@ -20,20 +20,8 @@
         <div class="absolute -bottom-[10%] left-[20%] w-[60%] h-[40%] bg-purple-900 opacity-20 rounded-full blur-3xl"></div>
     </div>
 
-    {% set store_colors = {
-        'ALDI': 'bg-blue-600',
-        'Big Y': 'bg-red-600',
-        'Food City': 'bg-green-600',
-        'Stop & Shop': 'bg-purple-600',
-        'Foster\'s': 'bg-yellow-500'
-    } %}
-    {% set store_flyers = {
-        'ALDI': 'https://info.aldi.us/weekly-specials/weekly-ads?zipCode=01376',
-        'Big Y': 'https://www.bigy.com/weekly-ad/flyerview',
-        'Food City': 'https://www.foodcitymkt.com/weekly-ad-1',
-        'Stop & Shop': 'https://stopandshop.com/weekly-ad?storeCode=0442',
-        'Foster\'s': 'https://www.fosterssupermarket.com/weekly-ad'
-    } %}
+
+
     <div class="max-w-6xl mx-auto relative z-10">
         <!-- Top Navigation -->
         <nav class="-mt-8 mb-6 bg-slate-900/80 backdrop-blur-md border-x border-b border-slate-700 rounded-b-xl px-6 py-5 flex justify-center items-center shadow-lg shadow-black/20 z-50">
@@ -47,7 +35,7 @@
         </nav>
 
 
-        <header class="flex justify-between items-center mb-4 pb-0">
+        <header class="flex justify-between items-center mb-8">
             <div class="flex flex-col items-start">
                 <img src="/static/images/logo.png" alt="Franklin Flyers Logo" class="h-48 w-auto object-contain brightness-110">
             </div>
@@ -84,267 +72,226 @@
         {% if not has_data %}
         <div class="bg-slate-900/50 backdrop-blur-md border border-slate-800 p-12 rounded-xl shadow-2xl text-center">
             <p class="text-xl text-slate-400 font-light mb-6">No flyer data analyzed yet.</p>
-            <p class="text-sm text-slate-500 italic">Log into Admin and use the Full Run control to publish the first snapshot.</p>
+            <p class="text-sm text-slate-500 italic">Log into Admin and run the Scraper to populate this page.</p>
         </div>
         {% else %}
-        
-        
-        {% if top_overall %}
-        <section class="mb-10">
-            <h2 class="text-2xl font-bold mb-4 text-white">🔥 Top 6 Deals Overall</h2>
-            <div class="border-t-8 border-red-600 rounded-t-lg"></div>
-            <div class="bg-white rounded-b-lg shadow p-6 mt-0">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="top-overall-grid">
-                    {% for deal in top_overall %}
-                    <div class="bg-gray-50 rounded border p-4 relative overflow-hidden text-gray-800 deal-card" data-store="{{ deal.store_name }}">
-                        <a href="{{ store_flyers.get(deal.store_name, '#') }}" target="_blank" class="absolute top-0 right-0 {{ store_colors.get(deal.store_name, 'bg-blue-500') }} text-white text-xs px-2 py-1 hover:brightness-110 transition-all z-20">{{ deal.store_name }}</a>
-                        <span class="text-xs text-gray-400 uppercase font-bold">{{ deal.category }}</span>
-                        <h3 class="font-bold text-lg mt-1">{{ deal.item_name }}</h3>
-                        <p class="text-xs text-gray-500 mb-2">{{ deal.description }}</p>
-                        <p class="text-2xl text-green-600 font-extrabold">{{ deal.sale_price }}</p>
-                        <p class="text-sm text-gray-600 mt-2 italic">"{{ deal.explanation }}"</p>
-                        <p class="text-xs text-gray-400 mt-2 text-right">Score: {{ deal.score }}/10</p>
-                    </div>
-                    {% endfor %}
-                    <div id="top-overall-empty" class="hidden col-span-full text-center py-10 text-gray-500 italic">
-                        No top deals found for the selected stores.
-                    </div>
-                </div>
-            </div>
-        </section>
-        {% endif %}
 
-        {% if deals_by_category %}
-        <section class="mb-10">
-            <h2 class="text-2xl font-bold mb-4 text-white">🛒 Top Deals by Category</h2>
-            <div class="border-t-8 border-red-600 rounded-t-lg"></div>
-            <div class="bg-white rounded-b-lg shadow p-6 grid grid-cols-1 md:grid-cols-2 gap-8 mt-0" id="deals-by-category-grid">
-                {% for category, deals in deals_by_category.items() %}
-                <div class="category-block" data-category-block>
-                    <h3 class="text-xl font-bold border-b pb-2 mb-4">{{ category|capitalize }}</h3>
-                    <ul class="space-y-3">
-                        {% for deal in deals %}
-                        <li class="bg-gray-50 p-4 rounded relative overflow-hidden pt-7 text-gray-800 deal-item" data-store="{{ deal.store_name }}">
-                            <a href="{{ store_flyers.get(deal.store_name, '#') }}" target="_blank" class="absolute top-0 right-0 {{ store_colors.get(deal.store_name, 'bg-blue-500') }} text-white text-xs px-2 py-0.5 opacity-90 font-medium hover:opacity-100 hover:brightness-110 transition-all z-20">{{ deal.store_name }}</a>
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <p class="font-semibold leading-tight text-lg">{{ deal.item_name }}</p>
-                                    <p class="text-sm text-gray-500 italic mt-1">{{ deal.description }}</p>
+        {% if overall_top_deals %}
+        <div class="mb-10">
+            <div class="flex items-center gap-3 mb-4">
+                <span class="bg-gradient-to-r from-amber-500 to-orange-600 text-white text-xs font-black uppercase tracking-widest py-1.5 px-4 rounded-full shadow-lg shadow-amber-500/20">Overall Top Value Picks</span>
+                <div class="h-px bg-gradient-to-r from-amber-500/50 to-transparent flex-grow"></div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" id="top-overall-container">
+                {% for deal in overall_top_deals %}
+                <div class="bg-slate-900/90 border border-amber-500/30 rounded-xl overflow-hidden shadow-lg hover:shadow-amber-500/10 hover:border-amber-500/60 transition-all deal-card flex flex-col h-full" data-store="{{ deal.store_name }}">
+                    <div class="px-4 py-3 flex-grow flex flex-col relative z-10 deal-item border-l-4 border-{{ deal.store_name.replace(' & ', '-').replace(' ', '-') }}">
+                        <div class="flex justify-between items-start mb-2 gap-2">
+                            <h3 class="text-base font-bold text-white leading-tight flex-grow line-clamp-2" title="{{ deal.item_name }}">{{ deal.item_name }}</h3>
+                            <span class="{{ store_colors.get(deal.store_name, 'bg-slate-700') }} text-white text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded shadow-sm flex-shrink-0">{{ deal.store_name }}</span>
+                        </div>
+                        <div class="flex items-baseline gap-2 mb-2">
+                            <span class="text-lg font-black text-amber-400">{{ deal.sale_price }}</span>
+                            {% if deal.original_price and deal.original_price != 'N/A' %}
+                            <span class="text-xs text-slate-500 line-through font-medium">{{ deal.original_price }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="mt-auto">
+                            <div class="flex items-center justify-between mt-3 mb-1">
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">{{ deal.category }}</span>
+                                <div class="flex gap-0.5" title="Value Score: {{ deal.value_score }}/10">
+                                    {% for i in range(1, 11) %}
+                                        <div class="h-1.5 w-1.5 rounded-full {% if i <= deal.value_score %}bg-amber-400{% else %}bg-slate-800{% endif %}"></div>
+                                    {% endfor %}
                                 </div>
-                                <div class="text-right text-green-600 font-bold text-lg ml-2">{{ deal.sale_price }}</div>
                             </div>
-                        </li>
-                        {% endfor %}
-                    </ul>
+                            <p class="text-xs text-slate-300 font-medium bg-slate-950/50 p-2 rounded-lg mt-2 line-clamp-3" title="{{ deal.reasoning }}">{{ deal.reasoning }}</p>
+                        </div>
+                    </div>
                 </div>
                 {% endfor %}
-                <div id="deals-by-category-empty" class="hidden col-span-full text-center py-10 text-gray-500 italic">
-                    No category deals found for the selected stores.
+            </div>
+            <div id="top-overall-empty" class="hidden text-center py-8 text-slate-500 text-sm font-medium italic bg-slate-900/50 rounded-xl border border-slate-800 border-dashed">
+                No top deals selected.
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div class="xl:col-span-2">
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-xs font-black uppercase tracking-widest py-1.5 px-4 rounded-full shadow-lg shadow-blue-500/20">Top Deals by Category</span>
+                    <div class="h-px bg-gradient-to-r from-blue-500/50 to-transparent flex-grow"></div>
                 </div>
-            </div>
-        </section>
-        {% endif %}
 
-        {% if best_store %}
-        <section class="mb-10" id="best-store-section" data-store="{{ best_store.store_name }}">
-            <h2 class="text-2xl font-bold mb-4 text-white">🏆 Best Store This Week: {{ best_store.store_name }}</h2>
-            <div class="border-t-8 border-red-600 rounded-t-lg"></div>
-            <div class="bg-white rounded-b-lg shadow p-6 mt-0">
-                <p class="mb-4 text-lg font-medium">{{ best_store.summary }}</p>
-                <div class="space-y-2">
-                    <p><strong class="text-green-700">Strengths:</strong> {{ best_store.strengths }}</p>
-                    <p><strong class="text-red-700">Weaknesses:</strong> {{ best_store.weaknesses }}</p>
-                </div>
-                <p class="text-right text-sm text-green-700 font-bold mt-4">Confidence Score: {{ best_store.score }}/10</p>
-            </div>
-        </section>
-        {% endif %}
-
-        {% if not top_overall and not deals_by_category and active_store_badges %}
-        <section class="mb-10">
-            <div class="bg-slate-900/50 backdrop-blur-md border border-slate-800 p-8 rounded-xl shadow-2xl text-center">
-                <p class="text-lg text-slate-300 font-medium mb-3">Store data is active, but the combined homepage snapshot has not been republished yet.</p>
-                <p class="text-sm text-slate-500 italic">Use the Full Run control from Admin to refresh the ranked site-wide analysis.</p>
-            </div>
-        </section>
-        {% endif %}
-
-        {% if seasonal_guide %}
-        <section class="mb-10">
-            <h2 class="text-2xl font-bold mb-4 text-white">🌱 Seasonal Guide</h2>
-            <div class="border-t-8 border-red-600 rounded-t-lg"></div>
-            <div class="bg-white rounded-b-lg shadow p-6 mt-0">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div class="bg-gray-50 rounded border p-6 border-l-8 border-green-500">
-                        <h3 class="text-xl font-bold text-green-700 mb-4">✅ In Season & Best Value</h3>
-                        <ul class="list-disc ml-5 space-y-2">
-                            {% for item in seasonal_guide.in_season %}
-                            <li class="text-sm leading-snug">
-                                {% if item is mapping %}
-                                <strong class="text-gray-900">{{ item.item }}</strong> — <span class="text-gray-600">{{ item.reason }}</span>
-                                {% else %}
-                                <span class="font-medium">{{ item }}</span>
-                                {% endif %}
-                            </li>
-                            {% endfor %}
-                            </ul>
+                <div id="deals-by-category-container">
+                    {% for category, items in category_deals.items() %}
+                    <div class="mb-8 category-section" data-category-block="{{ category }}">
+                        <h2 class="text-lg font-extrabold text-blue-300 mb-3 ml-1">{{ category }}</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-3 category-grid">
+                            {% for deal in items %}
+                            <div class="bg-slate-900 border border-slate-700/80 rounded-lg overflow-hidden shadow hover:border-slate-500 transition-colors deal-card flex flex-col h-full" data-store="{{ deal.store_name }}">
+                                <div class="px-3 py-2.5 flex-grow flex flex-col deal-item border-l-[3px] border-{{ deal.store_name.replace(' & ', '-').replace(' ', '-') }}">
+                                    <div class="flex justify-between items-start mb-1.5 gap-2">
+                                        <h3 class="text-sm font-bold text-white leading-snug flex-grow line-clamp-2" title="{{ deal.item_name }}">{{ deal.item_name }}</h3>
+                                        <span class="{{ store_colors.get(deal.store_name, 'bg-slate-700') }} text-white text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow-sm flex-shrink-0">{{ deal.store_name }}</span>
+                                    </div>
+                                    <div class="flex items-baseline gap-2 mb-2">
+                                        <span class="text-base font-black text-emerald-400">{{ deal.sale_price }}</span>
+                                        {% if deal.original_price and deal.original_price != 'N/A' %}
+                                        <span class="text-[10px] text-slate-500 line-through font-medium">{{ deal.original_price }}</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="mt-auto">
+                                        <div class="flex justify-end mb-1" title="Value Score: {{ deal.value_score }}/10">
+                                            <div class="flex gap-0.5">
+                                            {% for i in range(1, 11) %}
+                                                <div class="h-1 w-1 rounded-full {% if i <= deal.value_score %}bg-emerald-400{% else %}bg-slate-800{% endif %}"></div>
+                                            {% endfor %}
+                                            </div>
+                                        </div>
+                                        <p class="text-[11px] text-slate-400 leading-tight bg-slate-950/40 p-2 rounded line-clamp-2" title="{{ deal.reasoning }}">{{ deal.reasoning }}</p>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="bg-gray-50 rounded border p-6 border-l-8 border-red-500">
-                            <h3 class="text-xl font-bold text-red-700 mb-4">❌ Out of Season / High Price</h3>
-                            <ul class="list-disc ml-5 space-y-3">
-                            {% for item in seasonal_guide.out_season %}
-                            <li class="text-sm leading-snug">
-                                {% if item is mapping %}
-                                <strong class="text-gray-900">{{ item.item }}</strong> — <span class="text-gray-600">{{ item.reason }}</span>
-                                {% else %}
-                                <span class="font-medium">{{ item }}</span>
-                                {% endif %}
-                            </li>
                             {% endfor %}
-
-                        </ul>
+                        </div>
                     </div>
+                    {% endfor %}
+                </div>
+                <div id="deals-by-category-empty" class="hidden text-center py-12 text-slate-500 text-sm font-medium italic bg-slate-900/50 rounded-xl border border-slate-800 border-dashed">
+                    No deals match the selected filters.
                 </div>
             </div>
-        </section>
-        {% endif %}
 
-        {% if recipe_idea %}
-        <section class="mb-10">
-            <h2 class="text-2xl font-bold mb-4 text-white">🍳 Budget-Friendly Recipe Idea</h2>
-            <div class="border-t-8 border-red-600 rounded-t-lg"></div>
-            <div class="bg-white rounded-b-lg shadow p-6 mt-0 relative">
-                <div class="absolute top-6 right-6">
-                    <div class="bg-green-100 border border-green-200 px-4 py-2 rounded-full">
-                        <span class="text-green-800 font-bold text-sm">Estimated Cost: {{ recipe_idea.cost_per_plate }}</span>
-                    </div>
+            <div class="xl:col-span-1">
+                <div class="flex items-center gap-3 mb-4 sticky top-6">
+                    <span class="bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-black uppercase tracking-widest py-1.5 px-4 rounded-full shadow-lg shadow-emerald-500/20">Overall Best Store</span>
+                    <div class="h-px bg-gradient-to-r from-emerald-500/50 to-transparent flex-grow xl:hidden"></div>
                 </div>
                 
-                <h3 class="text-2xl font-normal text-gray-900 mb-4 pr-48">{{ recipe_idea.recipe_name }}</h3>
-                
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
-                    <div>
-                        <h4 class="font-bold text-gray-700 mb-2 uppercase tracking-wide text-sm">🛒 Featured Deal Ingredients</h4>
-                        <ul class="list-disc ml-5 space-y-1">
-                            {% for item in recipe_idea.ingredients_from_deals %}
-                            <li class="text-gray-800 font-medium">{{ item }}</li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                    <div>
-                        <h4 class="font-bold text-gray-700 mb-2 uppercase tracking-wide text-sm">🧂 Other Staples Needed</h4>
-                        <ul class="list-disc ml-5 space-y-1">
-                            {% for item in recipe_idea.other_ingredients %}
-                            <li class="text-gray-600">{{ item }}</li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                </div>
+                <div class="sticky top-16 space-y-6">
+                    {% if best_store %}
+                    <div class="bg-slate-900/80 backdrop-blur-md border border-emerald-500/30 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+                        <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-bl-full -mr-4 -mt-4"></div>
+                        <h2 class="text-3xl font-black text-white mb-1 relative z-10">{{ best_store }}</h2>
+                        <p class="text-emerald-400 text-sm font-bold uppercase tracking-widest mb-4 relative z-10">Winner of the Week</p>
 
-                <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
-                    <h4 class="font-bold text-gray-700 mb-2 uppercase tracking-wide text-sm">🍳 Instructions</h4>
-                    <p class="text-gray-800 leading-relaxed">{{ recipe_idea.instructions }}</p>
+                        <div class="bg-slate-950/60 rounded-xl p-4 border border-slate-800 relative z-10">
+                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Why it won:</h4>
+                            <p class="text-sm text-slate-200 leading-relaxed font-medium">{{ best_store_reasoning }}</p>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 shadow-lg text-center">
+                        <p class="text-sm text-slate-500 italic">Not enough data to determine a winner.</p>
+                    </div>
+                    {% endif %}
+
+                    {% if meal_idea %}
+                    <div class="bg-slate-900/80 backdrop-blur-md border border-purple-500/30 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+                        <div class="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-bl-full -mr-4 -mt-4"></div>
+                        <div class="flex items-center gap-2 mb-4 relative z-10">
+                            <span class="text-xl">🍳</span>
+                            <h3 class="text-lg font-black text-purple-300 uppercase tracking-widest">Recipe Idea</h3>
+                        </div>
+                        <div class="prose prose-sm prose-invert prose-p:leading-snug prose-headings:text-purple-300 max-w-none relative z-10 recipe-content">
+                            {{ meal_idea | safe }}
+                        </div>
+                    </div>
+                    <style>
+                        .recipe-content h1, .recipe-content h2, .recipe-content h3 { font-weight: 800; font-size: 1.1rem; margin-top: 1rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; color: #d8b4fe; }
+                        .recipe-content p { color: #cbd5e1; margin-bottom: 0.75rem; font-weight: 500;}
+                        .recipe-content ul, .recipe-content ol { padding-left: 1.2rem; margin-bottom: 1rem; color: #94a3b8; }
+                        .recipe-content li { margin-bottom: 0.25rem; }
+                        .recipe-content strong { color: #f8fafc; font-weight: 700;}
+                    </style>
+                    {% endif %}
                 </div>
             </div>
-        </section>
+        </div>
         {% endif %}
-
-
-
-        {% endif %}
-
-        <footer class="mt-16 border-t border-gray-700 pt-8 flex justify-between items-center text-gray-400">
-            <div>
-                {% if has_data %}
-                {% if latest_run %}
-                <p class="text-xs font-semibold text-gray-300">Last Published Snapshot: {{ latest_run.run_date.strftime('%Y-%m-%d %H:%M') }} UTC</p>
-                {% endif %}
-                {% endif %}
-                <p class="text-[10px] uppercase tracking-widest mt-2 text-gray-500 font-bold">&copy; 2026 Franklin Flyers. Local Intelligence.</p>
-            </div>
-            <a href="/admin" class="bg-gray-800 text-gray-200 py-1.5 px-4 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-gray-700 hover:text-white transition-all border border-gray-600">Admin Dashboard</a>
-        </footer>
     </div>
 
+    <!-- Filtering Script -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const checkboxes = document.querySelectorAll('.store-checkbox');
-            const dealCards = document.querySelectorAll('.deal-card');
-            const dealItems = document.querySelectorAll('.deal-item');
-            const categoryBlocks = document.querySelectorAll('[data-category-block]');
-            const topOverallEmpty = document.getElementById('top-overall-empty');
-            const dealsByCategoryEmpty = document.getElementById('deals-by-category-empty');
-            const bestStoreSection = document.getElementById('best-store-section');
             const selectAllBtn = document.getElementById('select-all-stores');
             const deselectAllBtn = document.getElementById('deselect-all-stores');
-
             const STORAGE_KEY = 'ff_grocery_store_filter';
 
-            function getCheckedStores() {
-                const checked = new Set();
-                checkboxes.forEach(cb => {
-                    if (cb.checked) checked.add(cb.value);
-                });
-                return checked;
-            }
-
             function applyFilter() {
-                const checkedStores = getCheckedStores();
+                const checkedStores = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
 
-                // Update visual styles on pills
-                checkboxes.forEach(cb => {
-                    const pill = cb.closest('.store-filter-pill');
-                    if (!pill) return;
-                    const badge = pill.querySelector('.store-badge');
-                    if (cb.checked) {
-                        pill.classList.remove('opacity-40');
-                        if (badge) badge.classList.remove('filter', 'grayscale', 'line-through');
+                // Save to localStorage
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(checkedStores));
+
+                const allCards = document.querySelectorAll('.deal-card');
+                let topOverallVisible = 0;
+                let categoryBlocksVisible = 0;
+
+                allCards.forEach(card => {
+                    const store = card.getAttribute('data-store');
+                    if (checkedStores.includes(store)) {
+                        card.style.display = '';
                     } else {
-                        pill.classList.add('opacity-40');
-                        if (badge) badge.classList.add('filter', 'grayscale', 'line-through');
+                        card.style.display = 'none';
                     }
                 });
 
-                // 1. Top 6 overall deals
-                let visibleTop = 0;
-                dealCards.forEach(card => {
-                    const store = card.getAttribute('data-store');
-                    const show = checkedStores.has(store);
-                    card.classList.toggle('hidden', !show);
-                    if (show) visibleTop++;
-                });
-                if (topOverallEmpty) {
-                    topOverallEmpty.classList.toggle('hidden', visibleTop > 0);
+                // Handle Top Overall empty state
+                const topOverallContainer = document.getElementById('top-overall-container');
+                const topOverallEmpty = document.getElementById('top-overall-empty');
+                if (topOverallContainer && topOverallEmpty) {
+                    const topCards = topOverallContainer.querySelectorAll('.deal-card');
+                    topCards.forEach(c => { if(c.style.display !== 'none') topOverallVisible++; });
+
+                    if (topOverallVisible === 0 && topCards.length > 0) {
+                        topOverallContainer.style.display = 'none';
+                        topOverallEmpty.style.display = 'block';
+                    } else {
+                        topOverallContainer.style.display = '';
+                        topOverallEmpty.style.display = 'none';
+                    }
                 }
 
-                // 2. Deals by Category
-                let visibleCategories = 0;
-                categoryBlocks.forEach(block => {
-                    let visibleItemsInCat = 0;
-                    const items = block.querySelectorAll('.deal-item');
-                    items.forEach(item => {
-                        const store = item.getAttribute('data-store');
-                        const show = checkedStores.has(store);
-                        item.classList.toggle('hidden', !show);
-                        if (show) visibleItemsInCat++;
-                    });
-                    block.classList.toggle('hidden', visibleItemsInCat === 0);
-                    if (visibleItemsInCat > 0) visibleCategories++;
+                // Handle Category sections empty states
+                const categorySections = document.querySelectorAll('.category-section');
+                const dealsByCategoryEmpty = document.getElementById('deals-by-category-empty');
+
+                categorySections.forEach(section => {
+                    const cards = section.querySelectorAll('.deal-card');
+                    let visibleInSec = 0;
+                    cards.forEach(c => { if(c.style.display !== 'none') visibleInSec++; });
+
+                    if (visibleInSec === 0) {
+                        section.style.display = 'none';
+                    } else {
+                        section.style.display = '';
+                        categoryBlocksVisible++;
+                    }
                 });
+
                 if (dealsByCategoryEmpty) {
-                    dealsByCategoryEmpty.classList.toggle('hidden', visibleCategories > 0);
+                    if (categoryBlocksVisible === 0 && categorySections.length > 0) {
+                        dealsByCategoryEmpty.style.display = 'block';
+                    } else {
+                        dealsByCategoryEmpty.style.display = 'none';
+                    }
                 }
 
-                // 3. Best Store section
-                if (bestStoreSection) {
-                    const store = bestStoreSection.getAttribute('data-store');
-                    bestStoreSection.classList.toggle('hidden', !checkedStores.has(store));
+                // Update select/deselect buttons styling
+                if (checkedStores.length === checkboxes.length) {
+                    selectAllBtn.classList.replace('text-blue-400', 'text-blue-500');
+                    deselectAllBtn.classList.replace('text-gray-300', 'text-gray-400');
+                } else if (checkedStores.length === 0) {
+                    selectAllBtn.classList.replace('text-blue-300', 'text-blue-400');
+                    deselectAllBtn.classList.replace('text-gray-400', 'text-gray-300');
+                } else {
+                    selectAllBtn.classList.replace('text-blue-500', 'text-blue-400');
+                    deselectAllBtn.classList.replace('text-gray-300', 'text-gray-400');
                 }
-
-                // Persist selection
-                try {
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(checkedStores)));
-                } catch (e) {}
             }
 
             // Restore from localStorage if available
