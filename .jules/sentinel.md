@@ -1,0 +1,4 @@
+## 2024-10-31 - Plaintext Password Storage in Admin DB
+**Vulnerability:** The application stored the admin panel password in plaintext in the `configurations` database table. Both initialization logic and change password logic used plaintext strings.
+**Learning:** Initializing the admin system securely is a critical starting point. When configuring first-time setup or default passwords for an application, they should immediately be hashed. Storing passwords in plaintext exposes administrators to severe risks if the database is ever compromised.
+**Prevention:** Always implement strong, salted password hashing algorithms (like PBKDF2, bcrypt, or Argon2) when storing passwords in the database from day one. In this app's architecture, default configurations that hold credentials must be hashed before being written to SQLite.
