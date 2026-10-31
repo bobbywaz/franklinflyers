@@ -5,6 +5,7 @@ import re
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
 from .models import PublishedSnapshotStore, Run, StoreDataset
 
@@ -265,7 +266,8 @@ def get_active_grocery_datasets(db, now: Optional[datetime.datetime] = None) -> 
             (StoreDataset.scraper_key == subquery.c.scraper_key)
             & (StoreDataset.finished_at == subquery.c.finished_at),
         )
-            .order_by(StoreDataset.store_name.asc())
+        .options(selectinload(StoreDataset.deals))
+        .order_by(StoreDataset.store_name.asc())
         .all()
     )
 
@@ -279,6 +281,7 @@ def get_active_dispensary_datasets(db, now: Optional[datetime.datetime] = None) 
             (StoreDataset.scraper_key == subquery.c.scraper_key)
             & (StoreDataset.finished_at == subquery.c.finished_at),
         )
+        .options(selectinload(StoreDataset.deals))
         .order_by(StoreDataset.store_name.asc())
         .all()
     )
@@ -296,6 +299,7 @@ def get_active_event_datasets(db, now: Optional[datetime.datetime] = None) -> Li
         .filter(
             StoreDataset.scraper_key.notin_(["hawks_and_reed", "greenfield_farmers_market"])
         )
+        .options(selectinload(StoreDataset.deals))
         .order_by(StoreDataset.store_name.asc())
         .all()
     )
@@ -322,6 +326,7 @@ def get_active_movie_datasets(db, now: Optional[datetime.datetime] = None) -> Li
             (StoreDataset.scraper_key == subquery.c.scraper_key)
             & (StoreDataset.finished_at == subquery.c.finished_at),
         )
+        .options(selectinload(StoreDataset.deals))
         .order_by(StoreDataset.store_name.asc())
         .all()
     )
@@ -348,6 +353,7 @@ def get_active_pharmacy_datasets(db, now: Optional[datetime.datetime] = None) ->
             (StoreDataset.scraper_key == subquery.c.scraper_key)
             & (StoreDataset.finished_at == subquery.c.finished_at),
         )
+        .options(selectinload(StoreDataset.deals))
         .order_by(StoreDataset.store_name.asc())
         .all()
     )
