@@ -25,6 +25,9 @@ from .store_utils import (
     get_active_movie_datasets,
     get_active_pharmacy_datasets,
     get_latest_attempt_by_key,
+    get_latest_attempts_dict,
+    get_latest_successes_dict,
+    get_active_datasets_dict,
 )
 
 
@@ -143,6 +146,10 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
     cards = []
     latest_published_datasets = [entry.dataset for entry in latest_run.published_stores if entry.dataset] if latest_run else []
 
+    latest_attempts_dict = get_latest_attempts_dict(db)
+    latest_successes_dict = get_latest_successes_dict(db)
+    active_datasets_dict = get_active_datasets_dict(db)
+
     for entry in manager.list_scrapers():
         scraper_key = entry["scraper_key"]
         if scraper_key in ("full_run", "grocery_run"):
@@ -163,9 +170,9 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
             )
             continue
 
-        latest_attempt = get_latest_attempt_by_key(db, scraper_key)
-        latest_success = _latest_success_by_key(db, scraper_key)
-        active_dataset = get_active_dataset_by_key(db, scraper_key)
+        latest_attempt = latest_attempts_dict.get(scraper_key)
+        latest_success = latest_successes_dict.get(scraper_key)
+        active_dataset = active_datasets_dict.get(scraper_key)
 
         if active_dataset:
             public_status = "Active"

@@ -414,3 +414,60 @@ def _date_from_match(match: Tuple[str, str, str], reference_date: datetime.date)
         return datetime.date(year_value, int(month), int(day))
     except ValueError:
         return None
+
+def get_latest_attempts_dict(db) -> Dict[str, StoreDataset]:
+    latest_attempt_sub = (
+        db.query(
+            StoreDataset.scraper_key,
+            func.max(StoreDataset.id).label("max_id")
+        )
+        .group_by(StoreDataset.scraper_key)
+        .subquery()
+    )
+    latest_attempts = db.query(StoreDataset).join(
+        latest_attempt_sub,
+        (StoreDataset.scraper_key == latest_attempt_sub.c.scraper_key) &
+        (StoreDataset.id == latest_attempt_sub.c.max_id)
+    ).all()
+    return {d.scraper_key: d for d in latest_attempts}
+
+
+def get_latest_successes_dict(db) -> Dict[str, StoreDataset]:
+    latest_success_sub = (
+        db.query(
+            StoreDataset.scraper_key,
+            func.max(StoreDataset.id).label("max_id")
+        )
+        .filter(StoreDataset.status == STATUS_SUCCESS)
+        .group_by(StoreDataset.scraper_key)
+        .subquery()
+    )
+    latest_successes = db.query(StoreDataset).join(
+        latest_success_sub,
+        (StoreDataset.scraper_key == latest_success_sub.c.scraper_key) &
+        (StoreDataset.id == latest_success_sub.c.max_id)
+    ).all()
+    return {d.scraper_key: d for d in latest_successes}
+
+
+def get_active_datasets_dict(db, now: Optional[datetime.datetime] = None) -> Dict[str, StoreDataset]:
+    now = now or utcnow()
+    active_sub = (
+        db.query(
+            StoreDataset.scraper_key,
+            func.max(StoreDataset.id).label("max_id")
+        )
+        .filter(
+            StoreDataset.status == STATUS_SUCCESS,
+            StoreDataset.expires_at != None,
+            StoreDataset.expires_at >= now
+        )
+        .group_by(StoreDataset.scraper_key)
+        .subquery()
+    )
+    active_datasets = db.query(StoreDataset).join(
+        active_sub,
+        (StoreDataset.scraper_key == active_sub.c.scraper_key) &
+        (StoreDataset.id == active_sub.c.max_id)
+    ).all()
+    return {d.scraper_key: d for d in active_datasets}
