@@ -137,7 +137,7 @@
                             {% for event in day_events %}
                             {% set event_color = 'bg-shea' if event.store_name == 'Shea Theater' else ('bg-rendezvous' if event.store_name == 'The Rendezvous' else ('bg-tree-house' if event.store_name == 'Tree House Brewing (South Deerfield)' else ('bg-northampton' if event.store_name == 'Northampton Live' else ('bg-four-phantoms' if event.store_name == 'Four Phantoms Brewing' else ('bg-chamber' if event.store_name == 'Franklin County Chamber Events' else ('bg-shelburne' if event.store_name == 'Shelburne Falls Calendar' else 'bg-visit-greenfield')))))) %}
                             <div class="{% if loop.index > 3 %}hidden calendar-extra{% endif %} rounded-md border border-gray-700 bg-gray-800 px-2 py-1.5 hover:border-indigo-400 transition-colors" title="{{ event.title }} - {{ event.store_name }}">
-                                <a href="#event-{{ event.id }}" class="block hover:underline focus:outline-none focus:ring-1 focus:ring-indigo-400 rounded">
+                                <a href="#event-{{ event.id }}" class="block hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded">
                                     <p class="truncate text-[11px] font-bold text-white hover:text-indigo-300 transition-colors">{{ event.title }}</p>
                                 </a>
                                 <p class="truncate text-[10px] text-gray-400"><span class="inline-block h-1.5 w-1.5 rounded-full {{ event_color }} mr-1"></span>{{ event.store_name }}</p>
