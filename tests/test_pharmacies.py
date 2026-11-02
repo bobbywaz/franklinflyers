@@ -298,28 +298,135 @@ async def test_analyze_pharmacy_deals_mock():
 
 def test_pharmacies_route_ai_sections():
     """Verify /pharmacies renders AI top deals, department sections, and best store value summary."""
-    client = TestClient(app)
-    response = client.get("/pharmacies")
-    assert response.status_code == 200
-    html = response.text
+    db = SessionLocal()
+    try:
+        now = utcnow()
+        dataset = StoreDataset(
+            scraper_key="test_walgreens",
+            store_name="Test Walgreens",
+            kind="pharmacy",
+            trigger_mode="manual_test",
+            status="success",
+            started_at=now,
+            finished_at=now,
+            expires_at=now + datetime.timedelta(days=3),
+            item_count=1,
+            items_scraped_count=1,
+        )
+        db.add(dataset)
+        db.flush()
 
-    assert "Top Pharmacy Deals Overall" in html
-    assert "Top Deals by Department" in html
-    assert "Best Pharmacy Value This Week" in html
-    assert "Search &amp; Browse All Circular Deals" in html or "Search & Browse All Circular Deals" in html
-    assert "Score: " in html
-    assert "Filter by Department:" in html
-    assert "Filter by Store:" in html
+        deal = StoreDeal(
+            dataset_id=dataset.id,
+            item_name="Bounty Paper Towels",
+            sale_price="$4.99",
+            description="Paper Products",
+        )
+        db.add(deal)
+        db.commit()
 
-    # Top Pharmacy Deals Overall structure checks
-    if "<span>Top Pharmacy Deals Overall</span>" in html:
-        top_section = html.split("<span>Top Pharmacy Deals Overall</span>")[1].split("Top Deals by Department")[0]
-        assert 'title="View store ad"' in top_section
-        assert "Store Ad ↗" not in top_section
-        assert "text-lg text-gray-900" in top_section
-        assert "text-sm font-semibold text-emerald-700" in top_section
-        assert "truncate max-w-[120px]" not in top_section
-        assert "bg-gray-100 p-2.5 rounded-lg border" not in top_section
+        # Seed mock AI analysis cache to trigger AI sections
+        import json
+        from app.models import Configuration
+
+        sig = f"{dataset.id}_{dataset.finished_at.isoformat() if dataset.finished_at else ''}_1"
+        mock_analysis = {
+            "sig": sig,
+            "analysis": {
+                "scored_deals": [{
+                    "id": deal.id,
+                    "store_name": "Test Walgreens",
+                    "scraper_key": "test_walgreens",
+                    "town": "Greenfield",
+                    "name": "Bounty Paper Towels",
+                    "price": "$4.99",
+                    "description": "Paper Products",
+                    "image_url": "",
+                    "store_info": {},
+                    "flyer_start": "",
+                    "flyer_end": "",
+                    "score": 8,
+                    "category": "Household & Paper Goods",
+                    "reasoning": "Good deal"
+                }],
+                "top_overall": [{
+                    "id": deal.id,
+                    "store_name": "Test Walgreens",
+                    "scraper_key": "test_walgreens",
+                    "town": "Greenfield",
+                    "name": "Bounty Paper Towels",
+                    "price": "$4.99",
+                    "description": "Paper Products",
+                    "image_url": "",
+                    "store_info": {},
+                    "flyer_start": "",
+                    "flyer_end": "",
+                    "score": 8,
+                    "category": "Household & Paper Goods",
+                    "reasoning": "Good deal"
+                }],
+                "deals_by_category": {
+                    "Household & Paper Goods": [{
+                        "id": deal.id,
+                        "store_name": "Test Walgreens",
+                        "scraper_key": "test_walgreens",
+                        "town": "Greenfield",
+                        "name": "Bounty Paper Towels",
+                        "price": "$4.99",
+                        "description": "Paper Products",
+                        "image_url": "",
+                        "store_info": {},
+                        "flyer_start": "",
+                        "flyer_end": "",
+                        "score": 8,
+                        "category": "Household & Paper Goods",
+                        "reasoning": "Good deal"
+                    }]
+                },
+                "best_pharmacy": {
+                    "store_name": "Test Walgreens",
+                    "town": "Greenfield",
+                    "scraper_key": "test_walgreens",
+                    "avg_score": 8.0,
+                    "summary": "Best store",
+                    "strengths": "Great prices",
+                    "weaknesses": "None",
+                    "badge_color": "bg-teal-600"
+                }
+            }
+        }
+        config = Configuration(key="pharmacy_ai_analysis", value=json.dumps(mock_analysis))
+        db.add(config)
+        db.commit()
+
+        client = TestClient(app)
+        response = client.get("/pharmacies")
+        assert response.status_code == 200
+        html = response.text
+
+        assert "Top Pharmacy Deals Overall" in html
+        assert "Top Deals by Department" in html
+        assert "Best Pharmacy Value This Week" in html
+        assert "Search &amp; Browse All Circular Deals" in html or "Search & Browse All Circular Deals" in html
+        assert "Score: " in html
+        assert "Filter by Department:" in html
+        assert "Filter by Store:" in html
+
+        # Top Pharmacy Deals Overall structure checks
+        if "<span>Top Pharmacy Deals Overall</span>" in html:
+            top_section = html.split("<span>Top Pharmacy Deals Overall</span>")[1].split("Top Deals by Department")[0]
+            assert 'title="View store ad"' in top_section
+            assert "Store Ad ↗" not in top_section
+            assert "text-lg text-gray-900" in top_section
+            assert "text-sm font-semibold text-emerald-700" in top_section
+            assert "truncate max-w-[120px]" not in top_section
+            assert "bg-gray-100 p-2.5 rounded-lg border" not in top_section
+    finally:
+        db.delete(config)
+        db.delete(deal)
+        db.delete(dataset)
+        db.commit()
+        db.close()
 
 
 async def _async_return(val):

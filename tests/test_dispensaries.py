@@ -1,6 +1,7 @@
 import pytest
 from starlette.testclient import TestClient
 
+import datetime
 from app.database import Base, SessionLocal, engine
 from app.main import app, get_discount_percentage, score_weed_deal, categorize_weed
 from app.models import StoreDataset, StoreDeal
@@ -52,15 +53,54 @@ def test_categorize_weed():
 
 def test_dispensaries_route_uncapped_and_zero_filler():
     """Verify /dispensaries renders genuine deals uncapped without score <= 6 filler items."""
-    client = TestClient(app)
-    response = client.get("/dispensaries")
-    assert response.status_code == 200
-    html = response.text
+    db = SessionLocal()
+    try:
+        now = utcnow()
+        dataset = StoreDataset(
+            scraper_key="patriot_care",
+            store_name="Patriot Care",
+            kind="dispensary",
+            trigger_mode="manual_test",
+            status="success",
+            started_at=now,
+            finished_at=now,
+            expires_at=now + datetime.timedelta(days=3),
+            item_count=2,
+            items_scraped_count=2,
+        )
+        db.add(dataset)
+        db.flush()
 
-    assert "Top Dispensary Deals" in html
-    assert "Top 6 Dispensary Deals" not in html
-    assert "Active Dispensary Menus" in html
-    assert "Best Store This Week" in html
+        deal1 = StoreDeal(
+            dataset_id=dataset.id,
+            item_name="Wedding Cake 3.5g",
+            sale_price="$28.00",
+            description="Hybrid | Sale from $40.00",
+        )
+        deal2 = StoreDeal(
+            dataset_id=dataset.id,
+            item_name="Grandpa's Cookies 1g",
+            sale_price="$9.00",
+            description="Hybrid | 20.4% THC | Earthy pine",
+        )
+        db.add_all([deal1, deal2])
+        db.commit()
 
-    # Verify score 1/10 filler items are excluded from top deals
-    assert "Score: 1/10" not in html
+        client = TestClient(app)
+        response = client.get("/dispensaries")
+        assert response.status_code == 200
+        html = response.text
+
+        assert "Top Dispensary Deals" in html
+        assert "Top 6 Dispensary Deals" not in html
+        assert "Active Dispensary Menus" in html
+        assert "Best Store This Week" in html
+
+        # Verify score 1/10 filler items are excluded from top deals
+        assert "Score: 1/10" not in html
+    finally:
+        db.delete(deal1)
+        db.delete(deal2)
+        db.delete(dataset)
+        db.commit()
+        db.close()
