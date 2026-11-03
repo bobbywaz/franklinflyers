@@ -143,6 +143,16 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
     cards = []
     latest_published_datasets = [entry.dataset for entry in latest_run.published_stores if entry.dataset] if latest_run else []
 
+    from .store_utils import (
+        get_all_latest_attempts,
+        get_all_latest_successes,
+        get_all_active_datasets,
+    )
+
+    all_latest_attempts = get_all_latest_attempts(db)
+    all_latest_successes = get_all_latest_successes(db)
+    all_active_datasets = get_all_active_datasets(db)
+
     for entry in manager.list_scrapers():
         scraper_key = entry["scraper_key"]
         if scraper_key in ("full_run", "grocery_run"):
@@ -163,9 +173,9 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
             )
             continue
 
-        latest_attempt = get_latest_attempt_by_key(db, scraper_key)
-        latest_success = _latest_success_by_key(db, scraper_key)
-        active_dataset = get_active_dataset_by_key(db, scraper_key)
+        latest_attempt = all_latest_attempts.get(scraper_key)
+        latest_success = all_latest_successes.get(scraper_key)
+        active_dataset = all_active_datasets.get(scraper_key)
 
         if active_dataset:
             public_status = "Active"

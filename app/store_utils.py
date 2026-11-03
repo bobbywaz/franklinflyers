@@ -377,6 +377,58 @@ def get_latest_attempt_by_key(db, scraper_key: str) -> Optional[StoreDataset]:
         .first()
     )
 
+def get_all_latest_attempts(db) -> Dict[str, StoreDataset]:
+    subquery = (
+        db.query(
+            StoreDataset.scraper_key,
+            func.max(StoreDataset.id).label("max_id")
+        )
+        .group_by(StoreDataset.scraper_key)
+        .subquery()
+    )
+
+    return {
+        d.scraper_key: d for d in
+        db.query(StoreDataset).join(subquery, StoreDataset.id == subquery.c.max_id).all()
+    }
+
+def get_all_latest_successes(db) -> Dict[str, StoreDataset]:
+    subquery = (
+        db.query(
+            StoreDataset.scraper_key,
+            func.max(StoreDataset.id).label("max_id")
+        )
+        .filter(StoreDataset.status == STATUS_SUCCESS)
+        .group_by(StoreDataset.scraper_key)
+        .subquery()
+    )
+
+    return {
+        d.scraper_key: d for d in
+        db.query(StoreDataset).join(subquery, StoreDataset.id == subquery.c.max_id).all()
+    }
+
+def get_all_active_datasets(db, now: Optional[datetime.datetime] = None) -> Dict[str, StoreDataset]:
+    now = now or utcnow()
+    subquery = (
+        db.query(
+            StoreDataset.scraper_key,
+            func.max(StoreDataset.id).label("max_id")
+        )
+        .filter(
+            StoreDataset.status == STATUS_SUCCESS,
+            StoreDataset.expires_at != None,
+            StoreDataset.expires_at >= now
+        )
+        .group_by(StoreDataset.scraper_key)
+        .subquery()
+    )
+
+    return {
+        d.scraper_key: d for d in
+        db.query(StoreDataset).join(subquery, StoreDataset.id == subquery.c.max_id).all()
+    }
+
 
 
 def snapshot_active_scraper_keys(db, run: Optional[Run], now: Optional[datetime.datetime] = None) -> Tuple[Run, set]:
