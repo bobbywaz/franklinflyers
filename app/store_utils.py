@@ -5,6 +5,7 @@ import re
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
 from .models import PublishedSnapshotStore, Run, StoreDataset
 
@@ -260,6 +261,7 @@ def get_active_grocery_datasets(db, now: Optional[datetime.datetime] = None) -> 
     subquery = active_dataset_subquery(db, GROCERY_KIND, now)
     return (
         db.query(StoreDataset)
+        .options(selectinload(StoreDataset.deals))
         .join(
             subquery,
             (StoreDataset.scraper_key == subquery.c.scraper_key)
@@ -274,6 +276,7 @@ def get_active_dispensary_datasets(db, now: Optional[datetime.datetime] = None) 
     subquery = active_dataset_subquery(db, "dispensary", now)
     return (
         db.query(StoreDataset)
+        .options(selectinload(StoreDataset.deals))
         .join(
             subquery,
             (StoreDataset.scraper_key == subquery.c.scraper_key)
@@ -288,6 +291,7 @@ def get_active_event_datasets(db, now: Optional[datetime.datetime] = None) -> Li
     subquery = active_dataset_subquery(db, "event", now)
     return (
         db.query(StoreDataset)
+        .options(selectinload(StoreDataset.deals))
         .join(
             subquery,
             (StoreDataset.scraper_key == subquery.c.scraper_key)
@@ -317,6 +321,7 @@ def get_active_movie_datasets(db, now: Optional[datetime.datetime] = None) -> Li
     subquery = active_dataset_subquery(db, "movie", now)
     return (
         db.query(StoreDataset)
+        .options(selectinload(StoreDataset.deals))
         .join(
             subquery,
             (StoreDataset.scraper_key == subquery.c.scraper_key)
@@ -343,6 +348,7 @@ def get_active_pharmacy_datasets(db, now: Optional[datetime.datetime] = None) ->
     subquery = active_dataset_subquery(db, "pharmacy", now)
     return (
         db.query(StoreDataset)
+        .options(selectinload(StoreDataset.deals))
         .join(
             subquery,
             (StoreDataset.scraper_key == subquery.c.scraper_key)
