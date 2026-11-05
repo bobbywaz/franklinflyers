@@ -2,6 +2,8 @@ import json
 import logging
 import os
 import datetime
+import hashlib
+import secrets
 import re
 from typing import Dict, List, Optional, Tuple
 
@@ -56,13 +58,26 @@ async def startup_event():
     try:
         admin_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
         if not admin_pass:
-            db.add(Configuration(key="admin_password", value="changeme"))
+            db.add(Configuration(key="admin_password", value=get_password_hash("changeme")))
             db.commit()
             logger.info("Initialized default admin password 'changeme'")
     finally:
         db.close()
 
     app.state.scheduler = start_scheduler()
+
+
+def get_password_hash(password: str) -> str:
+    salt = secrets.token_hex(16)
+    hash_bytes = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return f"pbkdf2:sha256:100000${salt}${hash_bytes.hex()}"
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if not hashed_password.startswith("pbkdf2:sha256:100000$"):
+        return plain_password == hashed_password
+    _, salt, hash_hex = hashed_password.split('$', 2)
+    hash_bytes = hashlib.pbkdf2_hmac('sha256', plain_password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return hash_bytes.hex() == hash_hex
 
 
 def _is_admin_authenticated(request: Request) -> bool:
@@ -1024,7 +1039,7 @@ async def admin_login(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     password = form.get("password")
     stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
-    if not stored_pass or password != stored_pass.value:
+    if not stored_pass or not isinstance(password, str) or not verify_password(password, stored_pass.value):
         return templates.TemplateResponse(
             request=request,
             name="admin_login.html",
@@ -1105,11 +1120,15 @@ async def admin_change_password(request: Request, db: Session = Depends(get_db))
     if not stored_pass:
         context = _build_admin_context(request, db, error="Configuration error")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
-    if current_password != stored_pass.value:
+    if not isinstance(current_password, str) or not verify_password(current_password, stored_pass.value):
         context = _build_admin_context(request, db, error="Invalid current password")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
 
-    stored_pass.value = new_password
+    if not isinstance(new_password, str):
+        context = _build_admin_context(request, db, error="Invalid new password format")
+        return templates.TemplateResponse(request=request, name="admin.html", context=context)
+
+    stored_pass.value = get_password_hash(new_password)
     db.commit()
     context = _build_admin_context(request, db, message="Password updated successfully.")
     return templates.TemplateResponse(request=request, name="admin.html", context=context)
