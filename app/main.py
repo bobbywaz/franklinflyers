@@ -17,6 +17,7 @@ from .gemini_analyzer import GeminiAnalyzer, PHARMACY_CATEGORIES
 from .manager import ScraperManager
 from .models import Configuration, Run, StoreDataset
 from .scheduler import run_full_scrape, run_grocery_scrape, run_single_scrape, start_scheduler
+from sqlalchemy import func
 from .store_utils import (
     STATUS_SUCCESS,
     format_date_range,
@@ -25,6 +26,7 @@ from .store_utils import (
     get_active_movie_datasets,
     get_active_pharmacy_datasets,
     get_latest_attempt_by_key,
+    utcnow,
 )
 
 
@@ -143,6 +145,21 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
     cards = []
     latest_published_datasets = [entry.dataset for entry in latest_run.published_stores if entry.dataset] if latest_run else []
 
+    subq_attempt = db.query(StoreDataset.scraper_key, func.max(StoreDataset.id).label('max_id')).group_by(StoreDataset.scraper_key).subquery()
+    latest_attempts = db.query(StoreDataset).join(subq_attempt, StoreDataset.id == subq_attempt.c.max_id).all()
+    latest_attempts_map = {d.scraper_key: d for d in latest_attempts}
+
+    subq_success = db.query(StoreDataset.scraper_key, func.max(StoreDataset.id).label('max_id')).filter(StoreDataset.status == STATUS_SUCCESS).group_by(StoreDataset.scraper_key).subquery()
+    latest_successes = db.query(StoreDataset).join(subq_success, StoreDataset.id == subq_success.c.max_id).all()
+    latest_successes_map = {d.scraper_key: d for d in latest_successes}
+
+    now_val = utcnow()
+    active_datasets_q = db.query(StoreDataset).filter(StoreDataset.status == STATUS_SUCCESS, StoreDataset.expires_at != None, StoreDataset.expires_at >= now_val).order_by(StoreDataset.finished_at.desc()).all()
+    active_datasets_map = {}
+    for d in active_datasets_q:
+        if d.scraper_key not in active_datasets_map:
+            active_datasets_map[d.scraper_key] = d
+
     for entry in manager.list_scrapers():
         scraper_key = entry["scraper_key"]
         if scraper_key in ("full_run", "grocery_run"):
@@ -163,9 +180,9 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
             )
             continue
 
-        latest_attempt = get_latest_attempt_by_key(db, scraper_key)
-        latest_success = _latest_success_by_key(db, scraper_key)
-        active_dataset = get_active_dataset_by_key(db, scraper_key)
+        latest_attempt = latest_attempts_map.get(scraper_key)
+        latest_success = latest_successes_map.get(scraper_key)
+        active_dataset = active_datasets_map.get(scraper_key)
 
         if active_dataset:
             public_status = "Active"
