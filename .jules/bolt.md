@@ -1,0 +1,3 @@
+## 2026-11-06 - Eager load relationships to fix N+1 queries
+**Learning:** In SQLAlchemy, iterating over relationships like Run.deals or Run.published_stores without eager loading causes O(N) database queries (N+1 problem). This is especially problematic in context builders like _build_home_context and _build_admin_context where these relationships are accessed for filtering or displaying counts.
+**Action:** Use .options(joinedload(...)) for scalar relationships (like best_store) and .options(selectinload(...)) for collections or nested relationships (like deals and published_stores.dataset) to eager load the data in a single/few queries.
