@@ -2,8 +2,28 @@ import json
 import logging
 import os
 import datetime
+import hashlib
+import secrets
 import re
 from typing import Dict, List, Optional, Tuple
+
+
+def get_password_hash(password: str) -> str:
+    salt = secrets.token_hex(16)
+    key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return f"pbkdf2:sha256:100000${salt}${key.hex()}"
+
+def verify_password(password: str, hashed_password: str) -> bool:
+    if not isinstance(password, str):
+        return False
+    if not hashed_password.startswith('pbkdf2:sha256:100000$'):
+        return False
+    try:
+        _, salt, hash_hex = hashed_password.split('$', 2)
+        key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+        return key.hex() == hash_hex
+    except Exception:
+        return False
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -56,9 +76,15 @@ async def startup_event():
     try:
         admin_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
         if not admin_pass:
-            db.add(Configuration(key="admin_password", value="changeme"))
+            hashed = get_password_hash("changeme")
+            db.add(Configuration(key="admin_password", value=hashed))
             db.commit()
-            logger.info("Initialized default admin password 'changeme'")
+            logger.info("Initialized default admin password")
+        elif not admin_pass.value.startswith('pbkdf2:sha256:100000$'):
+            # Migrate plaintext password
+            admin_pass.value = get_password_hash(admin_pass.value)
+            db.commit()
+            logger.info("Migrated admin password to hashed format")
     finally:
         db.close()
 
@@ -1024,7 +1050,7 @@ async def admin_login(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     password = form.get("password")
     stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
-    if not stored_pass or password != stored_pass.value:
+    if not stored_pass or not verify_password(password, stored_pass.value):
         return templates.TemplateResponse(
             request=request,
             name="admin_login.html",
@@ -1105,11 +1131,15 @@ async def admin_change_password(request: Request, db: Session = Depends(get_db))
     if not stored_pass:
         context = _build_admin_context(request, db, error="Configuration error")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
-    if current_password != stored_pass.value:
+    if not verify_password(current_password, stored_pass.value):
         context = _build_admin_context(request, db, error="Invalid current password")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
 
-    stored_pass.value = new_password
+    if not isinstance(new_password, str) or not new_password:
+        context = _build_admin_context(request, db, error="Invalid new password")
+        return templates.TemplateResponse(request=request, name="admin.html", context=context)
+
+    stored_pass.value = get_password_hash(new_password)
     db.commit()
     context = _build_admin_context(request, db, message="Password updated successfully.")
     return templates.TemplateResponse(request=request, name="admin.html", context=context)
