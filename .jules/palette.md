@@ -1,0 +1,3 @@
+## 2026-10-15 - Missing Focus States for Keyboard Navigation
+**Learning:** The application uses Tailwind's `focus:outline-none` and `focus:ring-0` resets on multiple interactive elements (checkboxes and buttons in index.html, and links in events.html). This removes the default browser focus indicator without providing a custom alternative, breaking keyboard accessibility (users cannot see what element has focus).
+**Action:** When updating Tailwind CSS classes for interactive elements, explicitly ensure keyboard accessibility by replacing `focus:outline-none` or `focus:ring-0` with visible focus indicators (e.g., `focus:ring-2 focus:ring-blue-500 rounded`), as Tailwind's resets commonly obscure focus states.
