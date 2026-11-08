@@ -1,0 +1,4 @@
+## 2024-03-24 - CI Failures Due to Unseeded Database
+**Vulnerability:** Not a security vulnerability, but a significant testing issue. The CI test suite failed because `test_dispensaries.py`, `test_home.py`, `test_movies.py`, and `test_pharmacies.py` require a seeded database to pass correctly, but the test environment was running against an empty database.
+**Learning:** When tests depend on specific data structures and relationships (like filtering logic based on store deals or score thresholds), relying on an empty database will lead to false negatives (tests failing unexpectedly) and masks true regressions.
+**Prevention:** Always initialize the database schema in tests using a robust pytest fixture (e.g. `setup_db` in `tests/conftest.py`) that explicitly seeds the necessary core mock data for critical endpoints before tests are executed. NEVER place `Base.metadata.create_all` at the module level.
