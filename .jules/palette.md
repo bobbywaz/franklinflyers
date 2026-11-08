@@ -1,0 +1,3 @@
+## 2024-05-24 - Restoring Keyboard Focus in Tailwind Filters
+**Learning:** Tailwind utility classes like `focus:ring-0` and `focus:outline-none` are often used to clean up mouse-click aesthetics on custom filter pills (like checkboxes and utility buttons), but this completely breaks keyboard accessibility by making focus invisible.
+**Action:** Always replace these with `focus-visible:ring-2` (for buttons) or explicitly configure ring offsets (`focus:ring-offset-slate-800`) for checkboxes against dark backgrounds to ensure focus states are only hidden for mouse users but remain visible for keyboard navigation.
