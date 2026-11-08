@@ -1,6 +1,8 @@
+import hashlib
 import json
 import logging
 import os
+import secrets
 import datetime
 import re
 from typing import Dict, List, Optional, Tuple
@@ -31,6 +33,25 @@ from .store_utils import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    hash_obj = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return f"pbkdf2:sha256:100000${salt}${hash_obj.hex()}"
+
+def verify_password(password: str, hashed_password: str) -> bool:
+    if not isinstance(password, str):
+        return False
+    if hashed_password.startswith("pbkdf2:sha256:100000$"):
+        parts = hashed_password.split('$', 2)
+        if len(parts) == 3:
+            _, salt, hash_hex = parts
+            hash_obj = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+            return secrets.compare_digest(hash_obj.hex(), hash_hex)
+    elif not hashed_password.startswith("pbkdf2:"):
+        # Legacy plaintext fallback. Pass-the-hash protected because hashed_password doesn't start with pbkdf2:
+        return secrets.compare_digest(password, hashed_password)
+    return False
+
 STORE_FLYERS = {
     "ALDI": "https://info.aldi.us/weekly-specials/weekly-ads?zipCode=01376",
     "Big Y": "https://www.bigy.com/weekly-ad/flyerview",
@@ -56,9 +77,9 @@ async def startup_event():
     try:
         admin_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
         if not admin_pass:
-            db.add(Configuration(key="admin_password", value="changeme"))
+            db.add(Configuration(key="admin_password", value=hash_password("changeme")))
             db.commit()
-            logger.info("Initialized default admin password 'changeme'")
+            logger.info("Initialized default admin password")
     finally:
         db.close()
 
@@ -1024,12 +1045,17 @@ async def admin_login(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     password = form.get("password")
     stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
-    if not stored_pass or password != stored_pass.value:
+    if not stored_pass or not verify_password(password, stored_pass.value):
         return templates.TemplateResponse(
             request=request,
             name="admin_login.html",
             context={"request": request, "error": "Invalid password"},
         )
+
+    # Upgrade legacy plaintext password to hash on successful login
+    if not stored_pass.value.startswith("pbkdf2:"):
+        stored_pass.value = hash_password(password)
+        db.commit()
 
     request.session["admin_authenticated"] = True
     return RedirectResponse(url="/admin", status_code=303)
@@ -1101,15 +1127,19 @@ async def admin_change_password(request: Request, db: Session = Depends(get_db))
     current_password = form.get("current_password")
     new_password = form.get("new_password")
 
+    if not isinstance(new_password, str) or not new_password.strip():
+        context = _build_admin_context(request, db, error="New password cannot be empty")
+        return templates.TemplateResponse(request=request, name="admin.html", context=context)
+
     stored_pass = db.query(Configuration).filter(Configuration.key == "admin_password").first()
     if not stored_pass:
         context = _build_admin_context(request, db, error="Configuration error")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
-    if current_password != stored_pass.value:
+    if not verify_password(current_password, stored_pass.value):
         context = _build_admin_context(request, db, error="Invalid current password")
         return templates.TemplateResponse(request=request, name="admin.html", context=context)
 
-    stored_pass.value = new_password
+    stored_pass.value = hash_password(new_password)
     db.commit()
     context = _build_admin_context(request, db, message="Password updated successfully.")
     return templates.TemplateResponse(request=request, name="admin.html", context=context)
