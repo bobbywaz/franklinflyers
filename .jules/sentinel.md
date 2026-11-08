@@ -1,4 +1,4 @@
-## 2024-03-24 - Plaintext Password Storage
-**Vulnerability:** Admin passwords were stored in plaintext in the database, allowing anyone with DB access to compromise admin accounts.
-**Learning:** Legacy plaintext fallbacks must be carefully implemented to prevent pass-the-hash attacks (e.g., rejecting comparisons if the stored value is already a hash). Form data can be None/UploadFile, so explicit string typing is required before hashing.
-**Prevention:** Store passwords using PBKDF2 with a unique salt. Use secrets.compare_digest for constant-time comparisons.
+## 2024-03-24 - CI Failures Due to Unseeded Database
+**Vulnerability:** Not a security vulnerability, but a significant testing issue. The CI test suite failed because `test_dispensaries.py`, `test_home.py`, `test_movies.py`, and `test_pharmacies.py` require a seeded database to pass correctly, but the test environment was running against an empty database.
+**Learning:** When tests depend on specific data structures and relationships (like filtering logic based on store deals or score thresholds), relying on an empty database will lead to false negatives (tests failing unexpectedly) and masks true regressions.
+**Prevention:** Always initialize the database schema in tests using a robust pytest fixture (e.g. `setup_db` in `tests/conftest.py`) that explicitly seeds the necessary core mock data for critical endpoints before tests are executed. NEVER place `Base.metadata.create_all` at the module level.
