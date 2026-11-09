@@ -160,7 +160,7 @@
                 <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {% for event in undated_events %}
                     <div class="rounded-md border border-gray-700 bg-gray-800 px-3 py-2 hover:border-indigo-400 transition-colors" title="{{ event.description }}">
-                        <a href="#event-{{ event.id }}" class="block hover:underline focus:outline-none">
+                        <a href="#event-{{ event.id }}" class="block hover:underline focus:outline-none focus:ring-2 focus:ring-indigo-400 rounded">
                             <p class="truncate text-xs font-bold text-white hover:text-indigo-300 transition-colors">{{ event.title }}</p>
                         </a>
                         <p class="truncate text-[10px] text-gray-400">{{ event.store_name }}</p>
