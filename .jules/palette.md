@@ -1,0 +1,3 @@
+## 2024-11-09 - Ensure visible focus states on interactive elements
+**Learning:** Tailwind CSS's default resets (`focus:outline-none`, `focus:ring-0`) can obscure focus states for keyboard users, making the application inaccessible. I found multiple occurrences of interactive elements (buttons, inputs) where focus rings were intentionally hidden without providing alternative visible indicators.
+**Action:** When updating Tailwind classes for interactive elements, always replace `focus:outline-none` or `focus:ring-0` with visible focus indicators (e.g., `focus:outline-none focus:ring-2 focus:ring-blue-500`) to ensure keyboard accessibility.
