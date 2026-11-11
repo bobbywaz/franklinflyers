@@ -1,0 +1,3 @@
+## 2026-11-11 - Eager loading to fix N+1
+**Learning:** The application currently hits the database with a separate query to fetch relationships for each deal (e.g. `deal.category`, `run.published_stores`) leading to N+1 queries. Eager loading relationships using `options(joinedload(...))` and `options(selectinload(...))` is the appropriate fix to optimize database interactions in SQLAlchemy context builders like `_build_home_context` and `_build_admin_context`.
+**Action:** Implement eager loading using `selectinload` for relationships in the `_build_home_context` and `_build_admin_context` functions to avoid N+1 queries.
