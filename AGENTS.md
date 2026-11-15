@@ -5,9 +5,9 @@ Read this before changing the project. Keep this file updated when architecture,
 ## Project
 
 - Stack: FastAPI, Jinja, SQLite/SQLAlchemy, Playwright, Gemini.
-- Runtime: Docker Compose.
+- Runtime: K3s Kubernetes cluster (`deployment/franklinflyers-web` on node `k3s-z`, manifest: `/mnt/scripts/k8s/manifests/batch3/franklinflyers.yaml`). Do not launch via Docker Compose.
 - App entrypoint: `app/main.py`.
-- Web port: host `8001` to container `8000`.
+- Web port: NodePort `30801` (forwarded to container `8000`), proxied by NPM for `franklinflyers.com` and `franklinflyers.bobbyw.name`. Restart command: `kubectl rollout restart deployment/franklinflyers-web -n default`.
 - Database: `franklin_flyers.db`.
 - Public pages: `/`, `/dispensaries`, `/events`, `/movies`, `/pharmacies`.
 - Admin: `/admin`, protected by session authentication.
@@ -18,14 +18,14 @@ Read this before changing the project. Keep this file updated when architecture,
 - **Run tests before and after making changes**: Ensure `pytest -q` passes with all 57 tests green.
 - **Zero-Cost Local Curation**: Keep deal evaluation and scoring deterministic ($0 external API cost).
 - **Strict Quality Filtering**: Only feature standout deals (score $\ge$ 8, e.g. $\ge$ 20% discount, BOGOs, $10 ExtraBucks); exclude all score $\le$ 6 promotional filler.
-- **Uncapped Real Deals**: If 15 deals qualify, show 15; if 40 qualify, show 40. Never artificially cap genuine deals.
+- **Top 6 Showcase & Uncapped Category Deals**: The homepage top banner specifically showcases the **Top 6 Deals Overall** (`[:6]`). Deals by Category underneath show all genuine qualifying deals without an artificial cap.
 - **Preserve Documentation & Comments**: Maintain existing docstrings and operational comments.
 
 ### NEVER
 - **NEVER Call Paid External AI**: Do not invoke Google GenAI API directly or set `USE_LEGACY_GEMINI=true`. Keep legacy Gemini safely archived in `app/legacy_gemini.py`.
 - **NEVER Render Mock / Placeholder Copy**: Never write `"mock evaluation"`, `"placeholder"`, or dummy items into production tables or UI templates.
 - **NEVER Commit Sensitive / Database Files**: Never commit `.env`, `*.db`, `*.db-wal`, `*.db-shm`, or `logs/`.
-- **NEVER Re-introduce Hard Quotas**: Never slice top deals with arbitrary limits like `[:6]` or `[:20]`.
+- **NEVER Break the Homepage Top 6 Showcase**: Keep the homepage top 6 deals banner focused on the top 6 standout deals.
 
 ### ASK FIRST
 - Modifying database table schemas (`app/models.py`).
@@ -70,9 +70,9 @@ Under NO circumstances should mock listings, dummy test data, synthetic placehol
 
 The entire purpose of Franklin Flyers is to highlight only genuine, high-value deals and protect users from supermarket promotional filler ("if it's a really good deal show it, otherwise don't"):
 
-1. **No Artificial Hard Number Cap**:
-   - Do not enforce an artificial hard number or quota (e.g. capped at 20 groceries, 6 dispensaries, or 8 pharmacies).
-   - If there are 18 standout deals across our local stores this week, show 18. If there are 45, show all 45.
+1. **Top 6 Showcase & Uncapped Category Deals**:
+   - The homepage top banner specifically showcases the **Top 6 Deals Overall** (`[:6]`) so users get an immediate, punchy overview of the best 6 deals across the area.
+   - For category breakdowns (Produce, Meat, Dairy, etc.) and departmental deals, do not enforce an artificial hard number cap: show all genuine qualifying deals (score $\ge$ 8).
 
 2. **Qualifying Standout Grocery Deals (Score $\ge$ 8 Only)**:
    - Only genuinely great deals qualify for publication:
@@ -104,10 +104,10 @@ Current registered keys, in manager order by category:
 - Grocery: `aldi`, `big_y`, `food_city`, `stop_and_shop`, `fosters`
 - Dispensary: `patriot_care`, `rise_dispensary`, `leaf_joy`, `heirloom_collection`, `pharmacy_257`, `smokey_leaf`, `cheech_and_chong`
 - Pharmacy: `cvs_greenfield`, `walgreens_greenfield`, `walgreens_turners_falls`
-- Events: `shea_theater`, `rendezvous`, `tree_house`, `northampton_live`, `four_phantoms`, `franklin_chamber`, `shelburne_falls`, `visit_greenfield`
+- Events: `shea_theater`, `rendezvous`, `tree_house`, `northampton_live`, `four_phantoms`, `franklin_chamber`, `shelburne_falls`, `visit_greenfield`, `river_culture`, `drake_amherst`, `iron_horse`, `luthiers_coop`, `marigold_theater`, `incandescent_brewing`, `bears_den`
 - Movies: `greenfield_garden_cinemas`, `cinemark_hadley`
 
-`grocery_run` and `full_run` are synthetic admin cards, not scraper keys. Hawks & Reed is retired and must not be re-added; stale `hawks_and_reed` event datasets are excluded from active event results.
+`full_run`, `grocery_run`, `events_run`, `movies_run`, `pharmacies_run`, and `dispensaries_run` are synthetic admin batch cards and endpoints, not single scraper keys. Hawks & Reed is retired and must not be re-added; stale `hawks_and_reed` event datasets are excluded from active event results.
 
 Every scraper should return a normalized result through `BaseScraper.build_result()`:
 
@@ -138,10 +138,17 @@ Current event sources:
 - The Rendezvous uses structured recurring weekly community event fallbacks pointing to `https://thevoo.net/events/`.
 - Tree House extracts Deerfield campus events from `https://treehousebrew.com/live-music-and-events` with resilient fallback.
 - Northampton Live reads `#calendar .event.upcoming a` and fetches detail pages for time, location, and description.
-- Four Phantoms uses structured recurring taproom event fallbacks pointing to `https://fourphantoms.com/lander`.
+- Four Phantoms extracts upcoming live shows, comedy, and taproom events from `https://www.fourphantoms.net/events` via direct Squarespace JSON API with resilient recurring event fallbacks.
 - Franklin County Chamber reads the monthly calendar at `https://chamber.franklincc.org/events/calendar/` with fallback to rolling event cards. This source also includes the Greenfield Farmers Market and other regional listings.
 - Shelburne Falls paginates event cards and dates from `https://www.shelburnefalls.com/calendar/` across multiple pages without Gemini.
 - Visit Greenfield extracts municipal, community, arts, and library events from `https://visitgreenfieldma.com/events/` via The Events Calendar REST API with Playwright DOM and curated local fallbacks.
+- RiverCulture extracts municipal, cultural, and community arts events and festivals from `https://www.riverculture.org/events` with curated Turners Falls and Montague fallbacks.
+- The Drake Amherst extracts live music, concerts, jazz jam sessions, and performing arts from `https://www.thedrakeamherst.org/events` via direct Squarespace JSON API with Playwright DOM and curated community arts fallbacks.
+- The Iron Horse extracts upcoming live music, concerts, and performances from `https://www.ironhorse.org/shows` via direct Elfsight calendar API with Playwright DOM and curated community performance fallbacks.
+- The Luthier's Co-op extracts upcoming live music, open mics, and jams from `https://www.luthiers-coop.com/events/` via The Events Calendar REST API with Playwright DOM and curated community fallbacks.
+- Marigold Theater extracts live music, cabaret, dance parties, and theater from `https://marigold.org/` via HTML gallery extraction with Playwright DOM and curated community fallbacks.
+- Incandescent Brewing extracts upcoming live music, trivia, and community events from `https://www.incandescentbrewing.com/events` via direct Squarespace JSON API with Playwright DOM and curated brewery fallbacks.
+- The Bear's Den Bar extracts upcoming live music, karaoke, open mics, puzzle competitions, and community events from `https://www.thebearsdenbar.com/event-list` via Wix warmup data and HTML extraction with Playwright DOM and curated Greenfield fallbacks.
 
 ## Grocery Scraper Notes
 
@@ -187,23 +194,22 @@ Current event sources:
 
 ## Commands
 
-Start or rebuild the app:
-
-```bash
-cd /mnt/docker/franklinflyers
-docker compose up -d --build
-```
-
 Watch the web service:
 
 ```bash
-docker compose logs -f web
+kubectl logs -f deployment/franklinflyers -c web -n default
+```
+
+Restart the service:
+
+```bash
+kubectl rollout restart deployment/franklinflyers -n default
 ```
 
 Run one scraper:
 
 ```bash
-docker compose exec -T web python - <<'PY'
+kubectl exec -i -n default deployment/franklinflyers -c web -- python - <<'PY'
 import asyncio
 from app.scheduler import run_single_scrape
 asyncio.run(run_single_scrape("big_y", trigger_mode="manual_single"))
@@ -213,7 +219,7 @@ PY
 Run a grocery-only batch:
 
 ```bash
-docker compose exec -T web python - <<'PY'
+kubectl exec -i -n default deployment/franklinflyers -c web -- python - <<'PY'
 import asyncio
 from app.scheduler import run_grocery_scrape
 asyncio.run(run_grocery_scrape(trigger_mode="manual_grocery"))
@@ -223,7 +229,7 @@ PY
 Run a full scrape:
 
 ```bash
-docker compose exec -T web python - <<'PY'
+kubectl exec -i -n default deployment/franklinflyers -c web -- python - <<'PY'
 import asyncio
 from app.scheduler import run_full_scrape
 asyncio.run(run_full_scrape(trigger_mode="manual_full"))
@@ -260,3 +266,4 @@ Note: In host environment, use `/tmp/franklinflyers-testenv/bin/python -m pytest
 - If a source changes its HTML or blocks requests, prefer a structured feed/API or direct browser extraction before adding AI.
 - Do not delete old valid data just because a new scrape failed.
 - Verify that rendered public pages and published snapshots contain zero mock listings, dummy text, or placeholder evaluations.
+- Server-level container health and host automation are orchestrated via `/mnt/scripts/` (see [`/mnt/scripts/AGENTS.md`](file:///mnt/scripts/AGENTS.md)).
