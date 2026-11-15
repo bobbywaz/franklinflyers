@@ -8,7 +8,9 @@ Playwright DOM fallback and resilient curated community defaults.
 
 import datetime
 import html
+import json
 import logging
+import os
 import re
 from typing import Dict, List, Optional
 from urllib.parse import urljoin
@@ -51,8 +53,16 @@ class VisitGreenfieldScraper(BaseScraper):
         events: List[Dict] = []
         event_dates: List[datetime.date] = []
 
-        # 1. Primary path: Fetch via Playwright in-browser session (bypasses bot challenges)
-        if page:
+        # 1. Primary path: FlareSolverr proxy (bypasses Cloudflare bot challenges on visitgreenfieldma.com)
+        try:
+            events, event_dates = await self._fetch_via_flaresolverr(today)
+            if events:
+                logger.info("Retrieved %d events via Visit Greenfield FlareSolverr API", len(events))
+        except Exception as fe:
+            logger.debug("Visit Greenfield FlareSolverr fetch not available or failed: %s", fe)
+
+        # 2. Secondary path: Fetch via Playwright in-browser session (bypasses bot challenges)
+        if not events and page:
             try:
                 events, event_dates = await self._fetch_via_browser_context(page, today)
                 if events:
@@ -60,7 +70,7 @@ class VisitGreenfieldScraper(BaseScraper):
             except Exception as be:
                 logger.warning("Visit Greenfield in-browser API fetch failed: %s; trying direct HTTP", be)
 
-        # 2. Secondary path: Direct REST API via httpx (used in test environments or headless runs)
+        # 3. Tertiary path: Direct REST API via httpx (used in test environments or headless runs)
         if not events:
             try:
                 events, event_dates = await self._fetch_via_api(today)
@@ -69,7 +79,7 @@ class VisitGreenfieldScraper(BaseScraper):
             except Exception as e:
                 logger.warning("Visit Greenfield direct REST API fetch failed: %s", e)
 
-        # 3. Tertiary path: Playwright browser DOM scraping
+        # 4. Quaternary path: Playwright browser DOM scraping
         if not events and page:
             try:
                 events, event_dates = await self._scrape_via_playwright(page, today)
@@ -78,7 +88,7 @@ class VisitGreenfieldScraper(BaseScraper):
             except Exception as pe:
                 logger.warning("Visit Greenfield Playwright DOM fallback failed: %s; using curated fallbacks", pe)
 
-        # 4. Quaternary path: Curated resilient recurring community fallbacks
+        # 5. Fallback: Curated resilient recurring community fallbacks
         if not events:
             logger.info("Using curated Greenfield community event fallbacks")
             events = self._build_fallback_events(today)
@@ -99,6 +109,34 @@ class VisitGreenfieldScraper(BaseScraper):
                 "items_scraped": len(events),
             }
         )
+
+    async def _fetch_via_flaresolverr(self, today: datetime.date) -> tuple[List[Dict], List[datetime.date]]:
+        """Fetch REST API via FlareSolverr proxy to bypass Cloudflare bot challenges."""
+        events: List[Dict] = []
+        event_dates: List[datetime.date] = []
+        flaresolverr_url = os.getenv("FLARESOLVERR_URL", "http://flaresolverr:8191/v1")
+        url = f"{self.api_url}?start_date={today.isoformat()}&per_page=100"
+        payload = {
+            "cmd": "request.get",
+            "url": url,
+            "maxTimeout": 45000,
+        }
+        async with httpx.AsyncClient(timeout=50.0) as client:
+            resp = await client.post(flaresolverr_url, json=payload)
+            if resp.status_code == 200:
+                sol = resp.json().get("solution", {})
+                resp_text = sol.get("response", "")
+                m = re.search(r"<pre[^>]*>(.*?)</pre>", resp_text, re.DOTALL)
+                json_str = m.group(1) if m else resp_text
+                data = json.loads(json_str)
+                api_events = data.get("events", [])
+                for ev in api_events:
+                    deal, ev_date = self._normalize_api_event(ev, today)
+                    if deal:
+                        events.append(deal)
+                        if ev_date:
+                            event_dates.append(ev_date)
+        return events, event_dates
 
     async def _fetch_via_browser_context(self, page: Page, today: datetime.date) -> tuple[List[Dict], List[datetime.date]]:
         """Fetch REST API directly within the browser session to bypass bot protections."""

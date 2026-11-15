@@ -7,7 +7,15 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models import Deal, FailedScrape, Run, StoreDataset
-from app.scheduler import run_full_scrape, run_single_scrape
+from app.scheduler import (
+    run_category_scrape,
+    run_dispensaries_scrape,
+    run_events_scrape,
+    run_full_scrape,
+    run_movies_scrape,
+    run_pharmacies_scrape,
+    run_single_scrape,
+)
 from app.store_utils import get_active_dataset_by_key
 
 
@@ -245,3 +253,50 @@ async def test_concurrent_single_scrapes_are_serialized(mock_session_local, mock
 
     # Verify that at no point did more than 1 scraper run at the same time
     assert max_concurrent == 1
+
+
+@pytest.mark.asyncio
+async def test_run_category_scrape_events(mock_session_local, mock_sync_jobs, db_session):
+    event_results = [
+        {
+            "scraper_key": "shea_theater",
+            "store_name": "Shea Theater",
+            "kind": "event",
+            "status": "success",
+            "error_message": None,
+            "payload": {
+                "scraper_key": "shea_theater",
+                "store_name": "Shea Theater",
+                "kind": "event",
+                "deals": [
+                    {
+                        "name": "Live Concert",
+                        "price": "7:00 PM",
+                        "event_date": "2026-10-10",
+                        "description": "Shea Theater Arts Center",
+                    }
+                ],
+                "item_count": 1,
+                "items_scraped_count": 1,
+                "flyer_start_date": datetime.date.today(),
+                "flyer_end_date": datetime.date.today() + datetime.timedelta(days=7),
+                "expires_at": datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + datetime.timedelta(days=3),
+                "next_refresh_at": datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + datetime.timedelta(hours=12),
+            },
+        }
+    ]
+
+    with patch("app.scheduler.ScraperManager") as MockManager:
+        MockManager.return_value.run_category_batch = AsyncMock(return_value=event_results)
+        datasets = await run_events_scrape(trigger_mode="manual_events")
+
+    assert len(datasets) == 1
+    assert datasets[0].scraper_key == "shea_theater"
+    assert datasets[0].kind == "event"
+    assert datasets[0].status == "success"
+    assert datasets[0].item_count == 1
+
+    stored = get_active_dataset_by_key(db_session, "shea_theater")
+    assert stored is not None
+    assert stored.kind == "event"
+

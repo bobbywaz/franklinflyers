@@ -20,7 +20,7 @@ class Run(Base):
 class Deal(Base):
     __tablename__ = 'deals'
     id = Column(Integer, primary_key=True)
-    run_id = Column(Integer, ForeignKey('runs.id'))
+    run_id = Column(Integer, ForeignKey('runs.id'), index=True)
     store_name = Column(String)
     item_name = Column(String)
     sale_price = Column(String)
@@ -77,7 +77,7 @@ class StoreDataset(Base):
 class StoreDeal(Base):
     __tablename__ = 'store_deals'
     id = Column(Integer, primary_key=True)
-    dataset_id = Column(Integer, ForeignKey('store_datasets.id'), nullable=False)
+    dataset_id = Column(Integer, ForeignKey('store_datasets.id'), nullable=False, index=True)
     item_name = Column(String)
     sale_price = Column(String)
     description = Column(String)
@@ -87,8 +87,8 @@ class StoreDeal(Base):
 class PublishedSnapshotStore(Base):
     __tablename__ = 'published_snapshot_stores'
     id = Column(Integer, primary_key=True)
-    run_id = Column(Integer, ForeignKey('runs.id'), nullable=False)
-    store_dataset_id = Column(Integer, ForeignKey('store_datasets.id'))
+    run_id = Column(Integer, ForeignKey('runs.id'), nullable=False, index=True)
+    store_dataset_id = Column(Integer, ForeignKey('store_datasets.id'), index=True)
     scraper_key = Column(String, nullable=False)
     store_name = Column(String, nullable=False)
 

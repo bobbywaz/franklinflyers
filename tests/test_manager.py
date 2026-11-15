@@ -92,3 +92,17 @@ def test_scraper_manager_registers_visit_greenfield():
     card_keys = [c["scraper_key"] for c in cards]
     assert "visit_greenfield" in card_keys
 
+
+def test_scraper_manager_registers_bears_den():
+    """Verify The Bear's Den scraper is registered in ScraperManager."""
+    manager = ScraperManager()
+    assert "bears_den" in manager.registry
+    assert "bears_den" in manager.scraper_order
+    bd = manager.registry["bears_den"]
+    assert bd.store_name == "The Bear's Den"
+    assert bd.kind == "event"
+
+    cards = manager.list_scrapers()
+    card_keys = [c["scraper_key"] for c in cards]
+    assert "bears_den" in card_keys
+

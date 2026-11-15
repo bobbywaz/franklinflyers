@@ -53,6 +53,39 @@
         </div>
         {% endif %}
 
+        {% if quick_batch_actions %}
+        <!-- Quick Batch Actions Toolbar (No Scrolling Required) -->
+        <section class="mb-10 rounded-3xl border border-slate-800 bg-slate-900/90 p-6 shadow-2xl backdrop-blur-md">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5 border-b border-slate-800 pb-4">
+                <div class="flex items-center gap-3">
+                    <div class="h-10 w-10 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-xl shadow-lg shadow-cyan-500/20">⚡</div>
+                    <div>
+                        <h2 class="text-xl font-extrabold text-white">Batch Scrape Controls</h2>
+                        <p class="text-xs text-slate-400">Trigger full category refreshes in one click without scrolling through individual scrapers.</p>
+                    </div>
+                </div>
+                <span class="text-[11px] font-bold uppercase tracking-wider text-cyan-400 bg-cyan-950/60 border border-cyan-800/60 px-3 py-1 rounded-full self-start sm:self-auto">One-Click Actions</span>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {% for action in quick_batch_actions %}
+                <form action="{{ action.action_url }}" method="POST" class="h-full">
+                    <button type="submit" class="w-full h-full text-left p-3.5 rounded-2xl border {{ action.color }} flex flex-col justify-between transition-all hover:scale-[1.02] active:scale-[0.98] shadow-md group">
+                        <div class="flex items-center justify-between gap-2 mb-2">
+                            <span class="text-2xl">{{ action.icon }}</span>
+                            <span class="h-7 w-7 rounded-full bg-slate-800 group-hover:bg-cyan-500 group-hover:text-slate-950 text-slate-300 flex items-center justify-center text-xs font-bold transition-colors">▶</span>
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold leading-tight text-white group-hover:text-cyan-300 transition-colors">{{ action.name }}</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">{{ action.desc }}</p>
+                        </div>
+                    </button>
+                </form>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
         {% macro render_card(card) %}
         <article class="rounded-3xl border border-slate-800 bg-slate-900/80 shadow-2xl overflow-hidden">
             <div class="px-5 py-5 border-b border-slate-800">
@@ -64,7 +97,7 @@
 
                         <h3 class="text-2xl font-extrabold text-white">{{ card.name }}</h3>
                     </div>
-                    <form action="{% if card.scraper_key == 'full_run' %}/admin/run/full{% elif card.scraper_key == 'grocery_run' %}/admin/run/groceries{% else %}/admin/run/{{ card.scraper_key }}{% endif %}" method="POST">
+                    <form action="{% if card.action_url %}{{ card.action_url }}{% elif card.scraper_key == 'full_run' %}/admin/run/full{% elif card.scraper_key == 'grocery_run' %}/admin/run/groceries{% elif card.scraper_key == 'events_run' %}/admin/run/events{% elif card.scraper_key == 'movies_run' %}/admin/run/movies{% elif card.scraper_key == 'pharmacies_run' %}/admin/run/pharmacies{% elif card.scraper_key == 'dispensaries_run' %}/admin/run/dispensaries{% else %}/admin/run/{{ card.scraper_key }}{% endif %}" method="POST">
                         <button type="submit" class="h-12 w-12 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center text-xl font-bold transition-colors shadow-lg shadow-cyan-500/20" title="Run {{ card.name }}">
                             ▶
                         </button>
@@ -142,12 +175,19 @@
 
         <!-- Grocery Scrapers -->
         <section class="mb-10">
-            <div class="flex items-center gap-3 mb-5 border-b border-slate-800 pb-3">
-                <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">🛒</div>
-                <div>
-                    <h2 class="text-xl font-extrabold text-white">Grocery Scrapers</h2>
-                    <p class="text-xs text-slate-400">Manage scrapers for weekly supermarket flyer advertisements.</p>
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-5 border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-3">
+                    <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">🛒</div>
+                    <div>
+                        <h2 class="text-xl font-extrabold text-white">Grocery Scrapers</h2>
+                        <p class="text-xs text-slate-400">Manage scrapers for weekly supermarket flyer advertisements.</p>
+                    </div>
                 </div>
+                <form action="/admin/run/groceries" method="POST">
+                    <button type="submit" class="px-3.5 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500 hover:text-slate-950 text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                        <span>▶</span> Scrape All Groceries
+                    </button>
+                </form>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {% for card in cards %}
@@ -160,12 +200,19 @@
 
         <!-- Dispensary Scrapers -->
         <section class="mb-10">
-            <div class="flex items-center gap-3 mb-5 border-b border-slate-800 pb-3">
-                <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">🌿</div>
-                <div>
-                    <h2 class="text-xl font-extrabold text-white">Dispensary Scrapers</h2>
-                    <p class="text-xs text-slate-400">Manage scrapers for local dispensary menu discounts.</p>
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-5 border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-3">
+                    <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">🌿</div>
+                    <div>
+                        <h2 class="text-xl font-extrabold text-white">Dispensary Scrapers</h2>
+                        <p class="text-xs text-slate-400">Manage scrapers for local dispensary menu discounts.</p>
+                    </div>
                 </div>
+                <form action="/admin/run/dispensaries" method="POST">
+                    <button type="submit" class="px-3.5 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500 hover:text-slate-950 text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                        <span>▶</span> Scrape All Dispensaries
+                    </button>
+                </form>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {% for card in cards %}
@@ -178,12 +225,19 @@
 
         <!-- Pharmacy Scrapers -->
         <section class="mb-10">
-            <div class="flex items-center gap-3 mb-5 border-b border-slate-800 pb-3">
-                <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">💊</div>
-                <div>
-                    <h2 class="text-xl font-extrabold text-white">Pharmacy Circular Scrapers</h2>
-                    <p class="text-xs text-slate-400">Manage scrapers for weekly CVS and Walgreens promotions and discounts.</p>
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-5 border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-3">
+                    <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">💊</div>
+                    <div>
+                        <h2 class="text-xl font-extrabold text-white">Pharmacy Circular Scrapers</h2>
+                        <p class="text-xs text-slate-400">Manage scrapers for weekly CVS and Walgreens promotions and discounts.</p>
+                    </div>
                 </div>
+                <form action="/admin/run/pharmacies" method="POST">
+                    <button type="submit" class="px-3.5 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500 hover:text-slate-950 text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                        <span>▶</span> Scrape All Pharmacies
+                    </button>
+                </form>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {% for card in cards %}
@@ -196,13 +250,19 @@
 
         <!-- Event Scrapers -->
         <section class="mb-10">
-
-            <div class="flex items-center gap-3 mb-5 border-b border-slate-800 pb-3">
-                <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">📅</div>
-                <div>
-                    <h2 class="text-xl font-extrabold text-white">Event Scrapers</h2>
-                    <p class="text-xs text-slate-400">Manage scrapers for local venue event calendars and schedules.</p>
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-5 border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-3">
+                    <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">📅</div>
+                    <div>
+                        <h2 class="text-xl font-extrabold text-white">Event Scrapers</h2>
+                        <p class="text-xs text-slate-400">Manage scrapers for local venue event calendars and schedules.</p>
+                    </div>
                 </div>
+                <form action="/admin/run/events" method="POST">
+                    <button type="submit" class="px-3.5 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500 hover:text-slate-950 text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                        <span>▶</span> Scrape All Events
+                    </button>
+                </form>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {% for card in cards %}
@@ -215,12 +275,19 @@
 
         <!-- Movie Showtime Scrapers -->
         <section class="mb-10">
-            <div class="flex items-center gap-3 mb-5 border-b border-slate-800 pb-3">
-                <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">🎬</div>
-                <div>
-                    <h2 class="text-xl font-extrabold text-white">Movie Showtime Scrapers</h2>
-                    <p class="text-xs text-slate-400">Manage scrapers for local cinema showtimes and schedules.</p>
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-5 border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-3">
+                    <div class="h-9 w-9 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-300">🎬</div>
+                    <div>
+                        <h2 class="text-xl font-extrabold text-white">Movie Showtime Scrapers</h2>
+                        <p class="text-xs text-slate-400">Manage scrapers for local cinema showtimes and schedules.</p>
+                    </div>
                 </div>
+                <form action="/admin/run/movies" method="POST">
+                    <button type="submit" class="px-3.5 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500 hover:text-slate-950 text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                        <span>▶</span> Scrape All Movies
+                    </button>
+                </form>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {% for card in cards %}

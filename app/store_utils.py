@@ -35,6 +35,14 @@ def utcnow() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
 
+def to_naive_utc(dt: Optional[datetime.datetime]) -> Optional[datetime.datetime]:
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    return dt
+
+
 def end_of_day(value: datetime.date) -> datetime.datetime:
     return datetime.datetime.combine(value, datetime.time(23, 59, 59))
 
@@ -46,11 +54,13 @@ def format_date_range(start: Optional[datetime.date], end: Optional[datetime.dat
 
 
 def compute_grocery_schedule(flyer_end_date: datetime.date, now: Optional[datetime.datetime] = None) -> Tuple[datetime.datetime, datetime.datetime]:
-    now = now or utcnow()
+    now = to_naive_utc(now or utcnow())
     expires_at = end_of_day(flyer_end_date)
     next_refresh_at = expires_at - datetime.timedelta(days=1)
     if next_refresh_at <= now:
         next_refresh_at = now + datetime.timedelta(minutes=5)
+    if expires_at <= now:
+        expires_at = now + datetime.timedelta(hours=24)
     return expires_at, next_refresh_at
 
 
@@ -99,6 +109,7 @@ def parse_date_value(value, reference_date: Optional[datetime.date] = None) -> O
     if not text:
         return None
     text = re.sub(r"\bSept\b", "Sep", text, flags=re.IGNORECASE)
+    text = re.sub(r"^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s*", "", text, flags=re.IGNORECASE).strip()
 
     for pattern in DATE_PATTERNS:
         try:
@@ -141,8 +152,8 @@ def parse_date_range_text(value: str, reference_date: Optional[datetime.date] = 
     return None, None
 
 
-def normalize_grocery_analysis(result, scraped_at: Optional[datetime.datetime] = None) -> Dict:
-    scraped_at = scraped_at or utcnow()
+def normalize_grocery_analysis(result, scraped_at: Optional[datetime.datetime] = None, kind: str = GROCERY_KIND) -> Dict:
+    scraped_at = to_naive_utc(scraped_at or utcnow())
     reference_date = scraped_at.date()
     date_source = "guessed"
     deals: List[Dict] = []
@@ -190,6 +201,16 @@ def normalize_grocery_analysis(result, scraped_at: Optional[datetime.datetime] =
         items_scraped_count = len(deals)
 
     calc_expires, calc_refresh = compute_grocery_schedule(flyer_end, scraped_at)
+    if kind == "event":
+        # Events calendars have dynamic, rolling schedules. To keep weekend and daily
+        # events always fresh and populated, schedule frequent regular refreshes (every 12 hours).
+        calc_refresh = scraped_at + datetime.timedelta(hours=12)
+        calc_expires = max(end_of_day(flyer_end), scraped_at + datetime.timedelta(days=3))
+    elif kind == "movie":
+        # Movie showtimes change and update frequently; refresh every 12 hours.
+        calc_refresh = scraped_at + datetime.timedelta(hours=12)
+        calc_expires = max(end_of_day(flyer_end), scraped_at + datetime.timedelta(days=2))
+
     expires_at = None
     next_refresh_at = None
     if isinstance(result, dict):
@@ -210,8 +231,14 @@ def normalize_grocery_analysis(result, scraped_at: Optional[datetime.datetime] =
             except ValueError:
                 next_refresh_at = None
 
-    expires_at = expires_at or calc_expires
-    next_refresh_at = next_refresh_at or calc_refresh
+    expires_at = to_naive_utc(expires_at or calc_expires)
+    next_refresh_at = to_naive_utc(next_refresh_at or calc_refresh)
+
+    # Ensure event and movie refresh is not pushed weeks out into the future
+    if kind in ("event", "movie"):
+        if next_refresh_at and next_refresh_at > scraped_at + datetime.timedelta(hours=24):
+            next_refresh_at = scraped_at + datetime.timedelta(hours=12)
+
     return {
         "deals": deals,
         "items_scraped_count": items_scraped_count,
@@ -223,14 +250,14 @@ def normalize_grocery_analysis(result, scraped_at: Optional[datetime.datetime] =
     }
 
 
-def build_grocery_result(scraper_key: str, store_name: str, result, scraped_at: Optional[datetime.datetime] = None) -> Dict:
-    scraped_at = scraped_at or utcnow()
-    normalized = normalize_grocery_analysis(result, scraped_at)
+def build_grocery_result(scraper_key: str, store_name: str, result, scraped_at: Optional[datetime.datetime] = None, kind: str = GROCERY_KIND) -> Dict:
+    scraped_at = to_naive_utc(scraped_at or utcnow())
+    normalized = normalize_grocery_analysis(result, scraped_at, kind=kind)
     normalized.update(
         {
             "scraper_key": scraper_key,
             "store_name": store_name,
-            "kind": GROCERY_KIND,
+            "kind": kind,
             "scraped_at": scraped_at,
         }
     )

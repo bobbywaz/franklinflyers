@@ -58,14 +58,23 @@
                     AI-evaluated weekly ad specials, digital coupons, and top department picks for CVS Pharmacy and Walgreens across Greenfield and Turners Falls.
                 </p>
                 {% if active_store_badges %}
-                <p class="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-1 mt-3">Current Pharmacy Circulars</p>
-                <div class="flex flex-wrap gap-2 justify-center md:justify-end">
+                <div class="flex items-center justify-center md:justify-end gap-2 mb-1.5 mt-3">
+                    <p class="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Current Pharmacy Circulars</p>
+                    <span class="text-gray-600 text-[10px]">•</span>
+                    <button type="button" id="select-all-stores" class="text-[10px] text-teal-400 hover:text-teal-300 font-semibold focus:outline-none transition-colors">All</button>
+                    <span class="text-gray-600 text-[10px]">•</span>
+                    <button type="button" id="deselect-all-stores" class="text-[10px] text-gray-400 hover:text-gray-300 font-semibold focus:outline-none transition-colors">None</button>
+                </div>
+                <div class="flex flex-wrap gap-2 justify-center md:justify-end mb-1" id="store-filters">
                     {% for badge in active_store_badges %}
-                    <a href="{{ badge.circular_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white {{ badge.badge_color }} rounded-lg shadow-md hover:brightness-110 transition-all" title="Open {{ badge.name }} weekly ad">
-                        <span>{{ badge.name }}</span>
-                        {% if badge.count %}<span class="bg-black/30 px-1.5 py-0.5 rounded text-[10px]">{{ badge.count }} deals</span>{% endif %}
-                        <span class="text-xs">↗</span>
-                    </a>
+                    <div class="inline-flex items-center bg-slate-800/90 border border-slate-700/80 rounded-full pl-2.5 pr-1 py-1 shadow-sm gap-2 transition-all store-filter-pill" data-store="{{ badge.name }}" data-store-key="{{ badge.scraper_key }}">
+                        <label class="inline-flex items-center cursor-pointer select-none" title="Toggle {{ badge.name }} listings">
+                            <input type="checkbox" checked value="{{ badge.name }}" data-store-checkbox="{{ badge.name }}" data-store-key="{{ badge.scraper_key }}" class="store-checkbox rounded text-teal-600 bg-gray-900 border-gray-500 focus:ring-0 focus:ring-offset-0 h-4 w-4 cursor-pointer">
+                        </label>
+                        <a href="{{ badge.circular_url }}" target="_blank" rel="noopener noreferrer" class="{{ badge.badge_color }} text-white rounded-full px-3 py-1 text-[10px] font-bold shadow-md hover:brightness-110 transition-all store-badge" title="Open {{ badge.name }} weekly ad">
+                            {{ badge.name }}{% if badge.count %} ({{ badge.count }} deals){% endif %}
+                        </a>
+                    </div>
                     {% endfor %}
                 </div>
                 {% elif pharmacy_info %}
@@ -74,7 +83,6 @@
                     {% for key, info in pharmacy_info.items() %}
                     <a href="{{ info.circular_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white {{ info.badge_color }} rounded-lg shadow-md hover:brightness-110 transition-all" title="Open {{ info.name }} weekly ad">
                         <span>{{ info.name }}</span>
-                        <span class="text-xs">↗</span>
                     </a>
                     {% endfor %}
                 </div>
@@ -84,13 +92,12 @@
 
         {% if has_data %}
 
-        <!-- Top Pharmacy Deals Overall (AI Scored) -->
+        <!-- Top 6 Pharmacy Deals Overall (AI Scored) -->
         {% if top_overall %}
-        <section class="mb-10">
+        <section class="mb-10" id="top-overall-section">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-2xl font-bold text-white flex items-center gap-2">
-                    <span>🔥</span>
-                    <span>Top Pharmacy Deals Overall</span>
+                <h2 class="text-2xl font-bold text-white">
+                    Top 6 Pharmacy Deals Overall
                 </h2>
                 <span class="text-xs text-teal-400 font-bold bg-teal-950/60 border border-teal-800 px-3 py-1 rounded-full">
                     Top AI-Scored Picks
@@ -98,38 +105,49 @@
             </div>
             <div class="border-t-8 border-teal-500 rounded-t-lg"></div>
             <div class="bg-white rounded-b-lg shadow-xl p-6 mt-0">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {% for deal in top_overall %}
-                    <div class="bg-gray-50 rounded-xl border border-gray-200 p-4 relative overflow-hidden flex flex-col justify-between text-gray-800 shadow-sm hover:shadow-md hover:border-teal-400 transition-all">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="top-overall-grid">
+                    {% for deal in top_overall[:6] %}
+                    <div class="bg-gray-50 rounded-xl border border-gray-200 p-4 relative overflow-hidden flex flex-col justify-between text-gray-800 shadow-sm hover:shadow-md hover:border-teal-400 transition-all deal-card" data-store="{{ deal.store_name }}" data-store-key="{{ deal.scraper_key }}">
+                        <a href="{{ deal.store_info.circular_url if deal.store_info else 'https://www.walgreens.com/offers/offers.jsp' }}" target="_blank" rel="noopener noreferrer" class="absolute top-0 right-0 {{ deal.store_info.badge_color if deal.store_info else 'bg-teal-600' }} text-white text-xs px-2.5 py-1 font-medium hover:brightness-110 transition-all z-20" title="View store ad">
+                            {{ deal.store_name }}
+                        </a>
                         <div>
-                            <div class="mb-2">
-                                <a href="{{ deal.store_info.circular_url if deal.store_info else 'https://www.walgreens.com/offers/offers.jsp' }}" target="_blank" rel="noopener noreferrer" class="inline-block px-2 py-0.5 text-[10px] font-black uppercase tracking-wider rounded text-white shadow-sm hover:opacity-90 hover:brightness-110 transition-all {{ deal.store_info.badge_color if deal.store_info else 'bg-teal-600' }}" title="View store ad">
-                                    {{ deal.store_name }}
-                                </a>
-                            </div>
+                            <span class="text-xs text-gray-400 uppercase font-bold">{{ deal.category }}</span>
 
                             {% if deal.image_url %}
-                            <div class="w-full h-32 bg-white rounded-lg mb-3 flex items-center justify-center overflow-hidden border border-gray-200 p-1">
+                            <div class="w-full h-32 bg-white rounded-lg my-2 flex items-center justify-center overflow-hidden border border-gray-200 p-1">
                                 <img src="{{ deal.image_url }}" alt="{{ deal.name }}" class="max-h-full max-w-full object-contain" loading="lazy" onerror="this.parentElement.style.display='none'">
                             </div>
                             {% endif %}
 
-                            <h3 class="font-bold text-lg text-gray-900 leading-snug mb-1 line-clamp-2" title="{{ deal.name }}">
+                            <h3 class="font-bold text-lg text-gray-900 leading-snug mb-1 mt-1 line-clamp-2" title="{{ deal.name }}">
                                 {{ deal.name }}
                             </h3>
 
-                            <p class="text-sm font-semibold text-emerald-700 mb-2 leading-tight">
+                            <p class="text-2xl text-emerald-600 font-extrabold mb-1">
                                 {{ deal.price }}
                             </p>
+
+                            {% if deal.explanation %}
+                            <p class="text-sm text-gray-600 mt-2 italic">"{{ deal.explanation }}"</p>
+                            {% elif deal.description and deal.description != deal.name %}
+                            <p class="text-xs text-gray-500 mt-1 line-clamp-2">{{ deal.description }}</p>
+                            {% endif %}
                         </div>
 
-                        <div class="pt-3 border-t border-gray-200 flex items-center justify-between text-xs">
+                        <div class="pt-3 border-t border-gray-200 flex items-center justify-between text-xs mt-3">
                             <span class="font-black px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[11px]">
                                 Score: {{ deal.score }}/10
+                            </span>
+                            <span class="text-gray-400 text-[11px]">
+                                {% if deal.flyer_end %}Until {{ deal.flyer_end }}{% else %}Weekly Ad{% endif %}
                             </span>
                         </div>
                     </div>
                     {% endfor %}
+                    <div id="top-overall-empty" class="hidden col-span-full text-center py-10 text-gray-500 italic">
+                        No top deals found for the selected stores.
+                    </div>
                 </div>
             </div>
         </section>
@@ -137,40 +155,42 @@
 
         <!-- Top Deals by Department / Category -->
         {% if deals_by_category %}
-        <section class="mb-10">
-            <h2 class="text-2xl font-bold mb-4 text-white flex items-center gap-2">
-                <span>💊</span>
-                <span>Top Deals by Department</span>
+        <section class="mb-10" id="deals-by-category-section">
+            <h2 class="text-2xl font-bold mb-4 text-white">
+                Top Deals by Department
             </h2>
             <div class="border-t-8 border-teal-500 rounded-t-lg"></div>
-            <div class="bg-white rounded-b-lg shadow-xl p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-0 text-gray-800">
+            <div class="bg-white rounded-b-lg shadow-xl p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-0 text-gray-800" id="deals-by-category-grid">
                 {% for category, deals in deals_by_category.items() %}
                 {% if deals %}
-                <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-col justify-between">
+                <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-col justify-between category-block" data-category-block>
                     <div>
                         <div class="flex items-center justify-between border-b border-gray-200 pb-2 mb-3">
-                            <h3 class="text-base font-black text-gray-900 flex items-center gap-1.5">
-                                <span>{% if category == 'Vitamins & Supplements' %}🌿{% elif category == 'Health & Medicine' %}🩺{% elif category == 'Personal Care & Beauty' %}🧴{% elif category == 'Household & Paper Goods' %}🧻{% elif category == 'Snacks & Beverages' %}🥤{% else %}👶{% endif %}</span>
-                                <span>{{ category }}</span>
+                            <h3 class="text-base font-black text-gray-900">
+                                {{ category }}
                             </h3>
-                            <span class="text-xs font-bold text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">{{ deals|length }} top picks</span>
+                            <span class="text-xs font-bold text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full cat-deal-count">{{ deals|length }} top picks</span>
                         </div>
                         <ul class="space-y-3">
                             {% for deal in deals %}
-                            <li class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm relative overflow-hidden">
-                                <div class="flex items-center justify-between gap-1 mb-1">
-                                    <span class="px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider rounded text-white {{ deal.store_info.badge_color if deal.store_info else 'bg-teal-600' }}">
-                                        {{ deal.store_name }}
-                                    </span>
-                                    <span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                        Score: {{ deal.score }}/10
-                                    </span>
+                            <li class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm relative overflow-hidden pt-7 dept-deal-item" data-store="{{ deal.store_name }}" data-store-key="{{ deal.scraper_key }}">
+                                <a href="{{ deal.store_info.circular_url if deal.store_info else 'https://www.walgreens.com/offers/offers.jsp' }}" target="_blank" rel="noopener noreferrer" class="absolute top-0 right-0 {{ deal.store_info.badge_color if deal.store_info else 'bg-teal-600' }} text-white text-xs px-2 py-0.5 opacity-90 font-medium hover:opacity-100 hover:brightness-110 transition-all z-20" title="View store ad">
+                                    {{ deal.store_name }}
+                                </a>
+                                <div class="flex justify-between items-start">
+                                    <div class="pr-2">
+                                        <p class="font-semibold leading-tight text-sm text-gray-900">{{ deal.name }}</p>
+                                        {% if deal.explanation %}
+                                        <p class="text-xs text-gray-500 italic mt-1 line-clamp-2">"{{ deal.explanation }}"</p>
+                                        {% elif deal.description and deal.description != deal.name %}
+                                        <p class="text-xs text-gray-500 mt-1 line-clamp-2">{{ deal.description }}</p>
+                                        {% endif %}
+                                    </div>
+                                    <div class="text-right shrink-0">
+                                        <span class="text-sm font-bold text-emerald-600 block">{{ deal.price }}</span>
+                                        <span class="text-[10px] text-gray-400 block mt-0.5">Score: {{ deal.score }}/10</span>
+                                    </div>
                                 </div>
-                                <p class="font-bold text-sm text-gray-900 leading-tight">{{ deal.name }}</p>
-                                <p class="text-xs text-emerald-600 font-extrabold mt-1">{{ deal.price }}</p>
-                                {% if deal.explanation %}
-                                <p class="text-[11px] text-gray-500 italic mt-1 line-clamp-2 leading-tight">"{{ deal.explanation }}"</p>
-                                {% endif %}
                             </li>
                             {% endfor %}
                         </ul>
@@ -178,14 +198,17 @@
                 </div>
                 {% endif %}
                 {% endfor %}
+                <div id="deals-by-category-empty" class="hidden col-span-full text-center py-10 text-gray-500 italic">
+                    No department deals found for the selected stores.
+                </div>
             </div>
         </section>
         {% endif %}
 
         <!-- Best Pharmacy This Week Summary -->
         {% if best_pharmacy %}
-        <section class="mb-10">
-            <h2 class="text-2xl font-bold mb-4 text-white">🏆 Best Pharmacy Value This Week: {{ best_pharmacy.store_name }}</h2>
+        <section class="mb-10" id="best-pharmacy-section" data-store="{{ best_pharmacy.store_name }}">
+            <h2 class="text-2xl font-bold mb-4 text-white">Best Pharmacy Value This Week: {{ best_pharmacy.store_name }}</h2>
             <div class="border-t-8 border-teal-500 rounded-t-lg"></div>
             <div class="bg-white rounded-b-lg shadow-xl p-6 mt-0 text-gray-800">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
@@ -206,9 +229,8 @@
         <section class="mb-12">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
                 <div>
-                    <h2 class="text-2xl font-bold text-white flex items-center gap-2">
-                        <span>📋</span>
-                        <span>Search & Browse All Circular Deals</span>
+                    <h2 class="text-2xl font-bold text-white">
+                        Search &amp; Browse All Circular Deals
                     </h2>
                     <p class="text-xs text-gray-400 mt-1">
                         Full catalog of all {{ total_deals_count }} scraped deals across CVS and Walgreens with instant multi-filter search.
@@ -249,7 +271,7 @@
                         </button>
                         {% for cat in categories %}
                         <button type="button" class="category-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-gray-900 text-gray-300 hover:text-white hover:bg-gray-700 border border-gray-700 transition-all" data-category="{{ cat }}">
-                            {% if cat == 'Vitamins & Supplements' %}🌿{% elif cat == 'Health & Medicine' %}🩺{% elif cat == 'Personal Care & Beauty' %}🧴{% elif cat == 'Household & Paper Goods' %}🧻{% elif cat == 'Snacks & Beverages' %}🥤{% else %}👶{% endif %} {{ cat }}
+                            {{ cat }}
                         </button>
                         {% endfor %}
                     </div>
@@ -259,7 +281,11 @@
                 <div>
                     <span class="text-xs font-bold uppercase text-gray-400 block mb-1">Instant Search:</span>
                     <div class="relative">
-                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">🔍</span>
+                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </span>
                         <input id="pharmacy-search" type="text" placeholder="Search 400+ deals by item name, brand, or discount (e.g. vitamins, BOGO, Huggies, Pepsi)..." class="w-full pl-10 pr-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-teal-500 transition-colors">
                     </div>
                 </div>
@@ -268,25 +294,19 @@
             <!-- Full Deals Grid -->
             <div id="deals-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
                 {% for item in all_deals %}
-                <div class="pharmacy-deal-card bg-gray-800/90 border border-gray-700 rounded-xl p-4 shadow-md flex flex-col justify-between hover:border-teal-500/60 transition-all duration-200"
+                <div class="pharmacy-deal-card bg-gray-800/90 border border-gray-700 rounded-xl p-4 shadow-md flex flex-col justify-between hover:border-teal-500/60 transition-all duration-200 relative overflow-hidden"
                      data-store="{{ item.scraper_key }}"
+                     data-store-name="{{ item.store_name }}"
                      data-category="{{ item.category }}"
                      data-search="{{ item.name|lower }} {{ item.price|lower }} {{ item.description|lower }} {{ item.store_name|lower }} {{ item.category|lower }}">
+                    <a href="{{ item.store_info.circular_url if item.store_info else '#' }}" target="_blank" rel="noopener noreferrer" class="absolute top-0 right-0 {{ item.store_info.badge_color if item.store_info else 'bg-teal-600' }} text-white text-xs px-2.5 py-1 font-medium hover:brightness-110 transition-all z-20" title="View store ad">
+                        {{ item.store_name }}
+                    </a>
                     <div>
-                        <!-- Card Top Pill & Town -->
-                        <div class="flex items-center justify-between gap-2 mb-2">
-                            <span class="px-2 py-0.5 text-[10px] font-black uppercase tracking-wider rounded-md text-white shadow-sm {{ item.store_info.badge_color if item.store_info else 'bg-teal-600' }}">
-                                {{ item.store_name }}
-                            </span>
-                            <span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-800 px-1.5 py-0.5 rounded">
-                                Score: {{ item.score }}/10
-                            </span>
-                        </div>
-
                         <!-- Department Tag -->
                         <div class="mb-2">
-                            <span class="text-[10px] text-gray-400 font-semibold" title="{{ item.category }}">
-                                {% if item.category == 'Vitamins & Supplements' %}🌿{% elif item.category == 'Health & Medicine' %}🩺{% elif item.category == 'Personal Care & Beauty' %}🧴{% elif item.category == 'Household & Paper Goods' %}🧻{% elif item.category == 'Snacks & Beverages' %}🥤{% else %}👶{% endif %} {{ item.category }}
+                            <span class="text-xs text-gray-400 uppercase font-bold" title="{{ item.category }}">
+                                {{ item.category }}
                             </span>
                         </div>
 
@@ -303,9 +323,12 @@
                         </h3>
 
                         <!-- Price / Discount Badge -->
-                        <div class="mb-2">
+                        <div class="flex items-center justify-between mb-2">
                             <span class="inline-block px-2.5 py-1 text-xs font-black text-amber-300 bg-amber-950/50 border border-amber-500/40 rounded-lg shadow-sm leading-tight">
                                 {{ item.price }}
+                            </span>
+                            <span class="text-[10px] text-gray-400">
+                                Score: {{ item.score }}/10
                             </span>
                         </div>
 
@@ -327,7 +350,7 @@
                             {% if item.flyer_end %}Until {{ item.flyer_end }}{% else %}Weekly Ad{% endif %}
                         </span>
                         <a href="{{ item.store_info.circular_url if item.store_info else '#' }}" target="_blank" rel="noopener noreferrer" class="text-teal-400 hover:text-teal-300 font-bold inline-flex items-center gap-1 transition-colors">
-                            Store Ad ↗
+                            Store Ad &nearr;
                         </a>
                     </div>
                 </div>
@@ -336,7 +359,11 @@
 
             <!-- No Results Hidden State -->
             <div id="no-deals-state" class="hidden bg-gray-800 border border-gray-700 p-12 rounded-xl text-center mb-12 shadow-xl">
-                <span class="text-4xl block mb-3">🔍</span>
+                <div class="w-12 h-12 rounded-full bg-gray-700 text-gray-400 mx-auto mb-3 flex items-center justify-center">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
                 <h3 class="text-lg font-bold text-white mb-1">No matching circular deals found</h3>
                 <p class="text-xs text-gray-400">Try broadening your search term or select "All Departments" to view all available deals.</p>
             </div>
@@ -345,7 +372,6 @@
         {% else %}
         <!-- Empty / No Data State -->
         <div class="bg-gray-800 border border-gray-700 p-12 rounded-xl shadow-2xl text-center mb-12">
-            <span class="text-4xl block mb-3">💊</span>
             <h2 class="text-xl text-gray-200 font-bold mb-2">No active pharmacy circular deals found</h2>
             <p class="text-sm text-gray-400 italic mb-6 max-w-md mx-auto">
                 Run the pharmacy scrapers for CVS Greenfield and Walgreens in the Scraper Control Room to populate today's circular deals!
@@ -359,32 +385,140 @@
 
     <!-- Client-Side Filtering & Search Script -->
     <script>
-        (function () {
-            var activeStore = 'all';
+        document.addEventListener('DOMContentLoaded', function () {
+            var checkboxes = document.querySelectorAll('.store-checkbox');
+            var topOverallCards = document.querySelectorAll('#top-overall-grid .deal-card');
+            var topOverallEmpty = document.getElementById('top-overall-empty');
+            var deptDealItems = document.querySelectorAll('.dept-deal-item');
+            var categoryBlocks = document.querySelectorAll('[data-category-block]');
+            var dealsByCategoryEmpty = document.getElementById('deals-by-category-empty');
+            var bestPharmacySection = document.getElementById('best-pharmacy-section');
+            var selectAllBtn = document.getElementById('select-all-stores');
+            var deselectAllBtn = document.getElementById('deselect-all-stores');
+
+            var activeStoreTab = 'all';
             var activeCategory = 'all';
             var searchQuery = '';
 
             var storeButtons = document.querySelectorAll('.store-filter-btn');
             var categoryButtons = document.querySelectorAll('.category-filter-btn');
             var searchInput = document.getElementById('pharmacy-search');
-            var cards = document.querySelectorAll('.pharmacy-deal-card');
+            var catalogCards = document.querySelectorAll('.pharmacy-deal-card');
             var noDealsEl = document.getElementById('no-deals-state');
             var countEl = document.getElementById('visible-deal-count');
 
-            function filterCards() {
+            var STORAGE_KEY = 'ff_pharmacy_store_filter';
+
+            function getCheckedStores() {
+                var checkedNames = new Set();
+                var checkedKeys = new Set();
+                checkboxes.forEach(function (cb) {
+                    if (cb.checked) {
+                        checkedNames.add(cb.value);
+                        var k = cb.getAttribute('data-store-key');
+                        if (k) checkedKeys.add(k);
+                    }
+                });
+                return { names: checkedNames, keys: checkedKeys };
+            }
+
+            function applyStoreFilters() {
+                var checked = getCheckedStores();
+                var checkedNames = checked.names;
+                var checkedKeys = checked.keys;
+
+                // 1. Update pill visuals in header
+                checkboxes.forEach(function (cb) {
+                    var pill = cb.closest('.store-filter-pill');
+                    var badge = pill ? pill.querySelector('.store-badge') : null;
+                    if (cb.checked) {
+                        if (pill) pill.classList.remove('opacity-40');
+                        if (badge) badge.classList.remove('filter', 'grayscale', 'line-through');
+                    } else {
+                        if (pill) pill.classList.add('opacity-40');
+                        if (badge) badge.classList.add('filter', 'grayscale', 'line-through');
+                    }
+                });
+
+                // 2. Top 6 section
+                var visibleTop = 0;
+                topOverallCards.forEach(function (card) {
+                    var store = card.getAttribute('data-store') || '';
+                    var storeKey = card.getAttribute('data-store-key') || '';
+                    var show = checkedNames.has(store) || checkedKeys.has(storeKey);
+                    card.classList.toggle('hidden', !show);
+                    if (show) visibleTop++;
+                });
+                if (topOverallEmpty) {
+                    topOverallEmpty.classList.toggle('hidden', visibleTop > 0);
+                }
+
+                // 3. Departments section
+                var visibleCategories = 0;
+                categoryBlocks.forEach(function (block) {
+                    var items = block.querySelectorAll('.dept-deal-item');
+                    var visibleItemsInCat = 0;
+                    items.forEach(function (item) {
+                        var store = item.getAttribute('data-store') || '';
+                        var storeKey = item.getAttribute('data-store-key') || '';
+                        var show = checkedNames.has(store) || checkedKeys.has(storeKey);
+                        item.classList.toggle('hidden', !show);
+                        if (show) visibleItemsInCat++;
+                    });
+                    block.classList.toggle('hidden', visibleItemsInCat === 0);
+                    var countBadge = block.querySelector('.cat-deal-count');
+                    if (countBadge) {
+                        countBadge.textContent = visibleItemsInCat + ' top pick' + (visibleItemsInCat === 1 ? '' : 's');
+                    }
+                    if (visibleItemsInCat > 0) visibleCategories++;
+                });
+                if (dealsByCategoryEmpty) {
+                    dealsByCategoryEmpty.classList.toggle('hidden', visibleCategories > 0);
+                }
+
+                // 4. Best Pharmacy section
+                if (bestPharmacySection) {
+                    var bestStore = bestPharmacySection.getAttribute('data-store') || '';
+                    var showBest = false;
+                    if (bestStore.indexOf('Walgreens') !== -1) {
+                        showBest = checkedKeys.has('walgreens_greenfield') || checkedKeys.has('walgreens_turners_falls') || Array.from(checkedNames).some(function (n) { return n.indexOf('Walgreens') !== -1; });
+                    } else if (bestStore.indexOf('CVS') !== -1) {
+                        showBest = checkedKeys.has('cvs_greenfield') || Array.from(checkedNames).some(function (n) { return n.indexOf('CVS') !== -1; });
+                    } else {
+                        showBest = checkedNames.has(bestStore);
+                    }
+                    bestPharmacySection.classList.toggle('hidden', !showBest);
+                }
+
+                // 5. Update catalog items
+                filterCatalogCards();
+
+                // Persist
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(checkedNames)));
+                } catch (e) {}
+            }
+
+            function filterCatalogCards() {
+                var checked = getCheckedStores();
+                var checkedNames = checked.names;
+                var checkedKeys = checked.keys;
+
                 var visibleCount = 0;
                 var q = searchQuery.toLowerCase().trim();
 
-                cards.forEach(function (card) {
+                catalogCards.forEach(function (card) {
                     var cardStore = card.getAttribute('data-store') || '';
+                    var cardStoreName = card.getAttribute('data-store-name') || '';
                     var cardCategory = card.getAttribute('data-category') || '';
                     var cardSearch = card.getAttribute('data-search') || '';
 
-                    var matchesStore = (activeStore === 'all' || cardStore === activeStore);
+                    var storeEnabled = checkedNames.has(cardStoreName) || checkedKeys.has(cardStore);
+                    var matchesTab = (activeStoreTab === 'all' || cardStore === activeStoreTab);
                     var matchesCategory = (activeCategory === 'all' || cardCategory === activeCategory);
                     var matchesQuery = (!q || cardSearch.indexOf(q) !== -1);
 
-                    if (matchesStore && matchesCategory && matchesQuery) {
+                    if (storeEnabled && matchesTab && matchesCategory && matchesQuery) {
                         card.classList.remove('hidden');
                         visibleCount++;
                     } else {
@@ -397,7 +531,7 @@
                 }
 
                 if (noDealsEl) {
-                    if (visibleCount === 0 && cards.length > 0) {
+                    if (visibleCount === 0 && catalogCards.length > 0) {
                         noDealsEl.classList.remove('hidden');
                     } else {
                         noDealsEl.classList.add('hidden');
@@ -405,10 +539,41 @@
                 }
             }
 
-            // Store Filter Tab Event Listeners
+            // Restore from localStorage
+            try {
+                var saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    var savedStores = JSON.parse(saved);
+                    if (Array.isArray(savedStores) && savedStores.length > 0) {
+                        checkboxes.forEach(function (cb) {
+                            cb.checked = savedStores.includes(cb.value);
+                        });
+                    }
+                }
+            } catch (e) {}
+
+            checkboxes.forEach(function (cb) {
+                cb.addEventListener('change', applyStoreFilters);
+            });
+
+            if (selectAllBtn) {
+                selectAllBtn.addEventListener('click', function () {
+                    checkboxes.forEach(function (cb) { cb.checked = true; });
+                    applyStoreFilters();
+                });
+            }
+
+            if (deselectAllBtn) {
+                deselectAllBtn.addEventListener('click', function () {
+                    checkboxes.forEach(function (cb) { cb.checked = false; });
+                    applyStoreFilters();
+                });
+            }
+
+            // Catalog Store Filter Tabs
             storeButtons.forEach(function (btn) {
                 btn.addEventListener('click', function () {
-                    activeStore = this.getAttribute('data-store') || 'all';
+                    activeStoreTab = this.getAttribute('data-store') || 'all';
 
                     storeButtons.forEach(function (b) {
                         b.classList.remove('bg-teal-600', 'text-white');
@@ -417,11 +582,11 @@
                     this.classList.remove('bg-gray-900', 'text-gray-300', 'border', 'border-gray-700');
                     this.classList.add('bg-teal-600', 'text-white');
 
-                    filterCards();
+                    filterCatalogCards();
                 });
             });
 
-            // Category Filter Tab Event Listeners
+            // Catalog Category Filter Tabs
             categoryButtons.forEach(function (btn) {
                 btn.addEventListener('click', function () {
                     activeCategory = this.getAttribute('data-category') || 'all';
@@ -433,18 +598,21 @@
                     this.classList.remove('bg-gray-900', 'text-gray-300', 'border', 'border-gray-700');
                     this.classList.add('bg-teal-600', 'text-white');
 
-                    filterCards();
+                    filterCatalogCards();
                 });
             });
 
-            // Instant Search Input Event Listener
+            // Instant Search Input
             if (searchInput) {
                 searchInput.addEventListener('input', function () {
                     searchQuery = this.value || '';
-                    filterCards();
+                    filterCatalogCards();
                 });
             }
-        })();
+
+            // Initial run
+            applyStoreFilters();
+        });
     </script>
 </body>
 </html>

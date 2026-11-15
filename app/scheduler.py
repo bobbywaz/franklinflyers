@@ -3,7 +3,7 @@ import datetime
 import json
 import logging
 import os
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
@@ -113,6 +113,51 @@ async def run_grocery_scrape(trigger_mode: str = "manual_grocery") -> Optional[R
             db.close()
 
 
+async def run_category_scrape(kind: str, trigger_mode: str) -> List[StoreDataset]:
+    logger.info("--- STARTING %s BATCH SCRAPE JOB (%s) ---", kind.upper(), trigger_mode)
+    async with _scrape_lock:
+        manager = ScraperManager()
+        results = await manager.run_category_batch(kind, run_date=utcnow().strftime("%Y-%m-%d %H:%M"))
+
+        db = SessionLocal()
+        persisted_list = []
+        try:
+            for result in results:
+                persisted = _persist_scrape_result(db, result, trigger_mode)
+                persisted_list.append(persisted)
+            db.commit()
+            _sync_dynamic_refresh_jobs()
+            for obj in persisted_list:
+                try:
+                    db.refresh(obj)
+                    db.expunge(obj)
+                except Exception:
+                    pass
+            return persisted_list
+        except Exception as e:
+            db.rollback()
+            logger.error("FATAL ERROR in %s scrape job: %s", kind, e, exc_info=True)
+            return []
+        finally:
+            db.close()
+
+
+async def run_events_scrape(trigger_mode: str = "manual_events") -> List[StoreDataset]:
+    return await run_category_scrape("event", trigger_mode)
+
+
+async def run_movies_scrape(trigger_mode: str = "manual_movies") -> List[StoreDataset]:
+    return await run_category_scrape("movie", trigger_mode)
+
+
+async def run_pharmacies_scrape(trigger_mode: str = "manual_pharmacies") -> List[StoreDataset]:
+    return await run_category_scrape("pharmacy", trigger_mode)
+
+
+async def run_dispensaries_scrape(trigger_mode: str = "manual_dispensaries") -> List[StoreDataset]:
+    return await run_category_scrape("dispensary", trigger_mode)
+
+
 async def run_single_scrape(scraper_key: str, trigger_mode: str = "manual_single") -> Optional[StoreDataset]:
     if scraper_key in _active_scrapers and trigger_mode == "manual_single":
         logger.info("Scraper %s is already running or queued; skipping duplicate trigger", scraper_key)
@@ -147,6 +192,11 @@ async def run_single_scrape(scraper_key: str, trigger_mode: str = "manual_single
                     )
                 db.commit()
                 _sync_dynamic_refresh_jobs()
+                try:
+                    db.refresh(persisted)
+                    db.expunge(persisted)
+                except Exception:
+                    pass
                 return persisted
             except Exception as e:
                 db.rollback()

@@ -30,6 +30,9 @@ class AldiScraper(BaseScraper):
 
             await self._dismiss_cookie_banner(page)
             if "aldi.us/store/" in getattr(page, "url", ""):
+                if "/flyers/view/" in getattr(page, "url", ""):
+                    await page.goto("https://www.aldi.us/store/aldi/pages/this-weeks-aldi-finds", wait_until="domcontentloaded", timeout=30000)
+                    await page.wait_for_timeout(2000)
                 analysis = await self._extract_storefront_deals(page)
                 if analysis:
                     return self.build_result(analysis)
@@ -51,7 +54,10 @@ class AldiScraper(BaseScraper):
 
     async def _extract_storefront_deals(self, page: Page) -> Optional[Dict]:
         price_labels = page.locator("span.screen-reader-only", has_text="Current price:")
-        await price_labels.first.wait_for(state="visible", timeout=30000)
+        try:
+            await price_labels.first.wait_for(state="attached", timeout=15000)
+        except Exception:
+            return None
         deals = []
 
         for index in range(await price_labels.count()):
@@ -102,7 +108,7 @@ class AldiScraper(BaseScraper):
             "items_scraped": await price_labels.count(),
             "flyer_start_date": start_date.isoformat(),
             "flyer_end_date": (start_date + datetime.timedelta(days=6)).isoformat(),
-            "deals": deals[:20],
+            "deals": deals,
         }
 
     async def _dismiss_cookie_banner(self, page: Page) -> None:
@@ -111,6 +117,13 @@ class AldiScraper(BaseScraper):
             await page.wait_for_timeout(1000)
         except Exception:
             logger.info("ALDI cookie banner was not shown or could not be dismissed")
+        try:
+            onetrust_btn = page.locator("#onetrust-accept-btn-handler")
+            if await onetrust_btn.count() > 0:
+                await onetrust_btn.click(timeout=3000)
+                await page.wait_for_timeout(1000)
+        except Exception:
+            pass
 
     async def _load_greenfield_flyer(self, page: Page) -> None:
         info_frame = page.frame_locator('iframe[title="Information Panel"]')

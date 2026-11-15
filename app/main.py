@@ -11,16 +11,28 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 from .database import SessionLocal, get_db, init_db
 from .gemini_analyzer import GeminiAnalyzer, PHARMACY_CATEGORIES
 from .manager import ScraperManager
 from .models import Configuration, Run, StoreDataset
-from .scheduler import run_full_scrape, run_grocery_scrape, run_single_scrape, start_scheduler
+from .scheduler import (
+    run_dispensaries_scrape,
+    run_events_scrape,
+    run_full_scrape,
+    run_grocery_scrape,
+    run_movies_scrape,
+    run_pharmacies_scrape,
+    run_single_scrape,
+    start_scheduler,
+)
 from .store_utils import (
     STATUS_SUCCESS,
     format_date_range,
     get_active_dataset_by_key,
+    get_active_dispensary_datasets,
+    get_active_event_datasets,
     get_active_grocery_datasets,
     get_active_movie_datasets,
     get_active_pharmacy_datasets,
@@ -40,6 +52,7 @@ STORE_FLYERS = {
 }
 
 app = FastAPI(title="Franklin Flyers")
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("ADMIN_SESSION_SECRET", "franklin-flyers-admin-session"),
@@ -137,26 +150,122 @@ def _build_home_context(request: Request, db: Session):
     }
 
 
+BATCH_KEYS = {"full_run", "grocery_run", "events_run", "movies_run", "pharmacies_run", "dispensaries_run"}
+
+BATCH_CONFIGS = {
+    "grocery_run": {
+        "name": "All Groceries",
+        "action_url": "/admin/run/groceries",
+        "icon": "🛒",
+        "subtitle": "5 Supermarkets",
+    },
+    "events_run": {
+        "name": "All Events",
+        "action_url": "/admin/run/events",
+        "icon": "📅",
+        "subtitle": "10 Event Calendars",
+    },
+    "movies_run": {
+        "name": "All Movies",
+        "action_url": "/admin/run/movies",
+        "icon": "🎬",
+        "subtitle": "2 Movie Theaters",
+    },
+    "pharmacies_run": {
+        "name": "All Pharmacies",
+        "action_url": "/admin/run/pharmacies",
+        "icon": "💊",
+        "subtitle": "3 Pharmacy Circulars",
+    },
+    "dispensaries_run": {
+        "name": "All Dispensaries",
+        "action_url": "/admin/run/dispensaries",
+        "icon": "🌿",
+        "subtitle": "7 Dispensaries",
+    },
+    "full_run": {
+        "name": "Full Run (Everything)",
+        "action_url": "/admin/run/full",
+        "icon": "⚡",
+        "subtitle": "All 27 Sources",
+    },
+}
+
+
 def _build_admin_context(request: Request, db: Session, message: str = None, error: str = None):
     manager = ScraperManager()
     latest_run = db.query(Run).filter(Run.is_ready == True).order_by(Run.run_date.desc()).first()
     cards = []
     latest_published_datasets = [entry.dataset for entry in latest_run.published_stores if entry.dataset] if latest_run else []
 
+    quick_batch_actions = [
+        {"key": "grocery_run", "name": "Scrape All Groceries", "action_url": "/admin/run/groceries", "icon": "🛒", "desc": "5 Supermarkets", "color": "border-red-500/60 bg-red-950/20 hover:bg-red-900/40 text-red-200 shadow-red-500/10"},
+        {"key": "events_run", "name": "Scrape All Events", "action_url": "/admin/run/events", "icon": "📅", "desc": "10 Calendars", "color": "border-indigo-500/60 bg-indigo-950/20 hover:bg-indigo-900/40 text-indigo-200 shadow-indigo-500/10"},
+        {"key": "movies_run", "name": "Scrape All Movies", "action_url": "/admin/run/movies", "icon": "🎬", "desc": "2 Theaters", "color": "border-amber-500/60 bg-amber-950/20 hover:bg-amber-900/40 text-amber-200 shadow-amber-500/10"},
+        {"key": "pharmacies_run", "name": "Scrape All Pharmacies", "action_url": "/admin/run/pharmacies", "icon": "💊", "desc": "3 Circulars", "color": "border-emerald-500/60 bg-emerald-950/20 hover:bg-emerald-900/40 text-emerald-200 shadow-emerald-500/10"},
+        {"key": "dispensaries_run", "name": "Scrape All Dispensaries", "action_url": "/admin/run/dispensaries", "icon": "🌿", "desc": "7 Dispensaries", "color": "border-green-500/60 bg-green-950/20 hover:bg-green-900/40 text-green-200 shadow-green-500/10"},
+        {"key": "full_run", "name": "Full Run (Everything)", "action_url": "/admin/run/full", "icon": "⚡", "desc": "All 27 Sources", "color": "border-cyan-500/60 bg-cyan-950/20 hover:bg-cyan-900/40 text-cyan-200 shadow-cyan-500/10"},
+    ]
+
     for entry in manager.list_scrapers():
         scraper_key = entry["scraper_key"]
-        if scraper_key in ("full_run", "grocery_run"):
-            is_grocery = (scraper_key == "grocery_run")
+        if scraper_key in BATCH_KEYS:
+            cfg = BATCH_CONFIGS.get(scraper_key, {})
+            name = cfg.get("name", scraper_key)
+            if scraper_key == "grocery_run":
+                pub_status = "Published" if latest_run else "Missing"
+                lat_status = "Ready" if latest_run else "Never Run"
+                items_cnt = sum(dataset.items_scraped_count or dataset.item_count or 0 for dataset in latest_published_datasets)
+                deal_cnt = len(latest_run.deals) if latest_run else 0
+                d_label = latest_run.run_date.strftime("%Y-%m-%d %H:%M UTC") if latest_run else ""
+            elif scraper_key == "events_run":
+                active_events = get_active_event_datasets(db)
+                pub_status = "Active" if active_events else "Missing"
+                lat_status = "Ready" if active_events else "Never Run"
+                items_cnt = sum(d.item_count for d in active_events)
+                deal_cnt = items_cnt
+                d_label = f"{len(active_events)} Calendars Active" if active_events else ""
+            elif scraper_key == "movies_run":
+                active_movies = get_active_movie_datasets(db)
+                pub_status = "Active" if active_movies else "Missing"
+                lat_status = "Ready" if active_movies else "Never Run"
+                items_cnt = sum(d.item_count for d in active_movies)
+                deal_cnt = items_cnt
+                d_label = f"{len(active_movies)} Theaters Active" if active_movies else ""
+            elif scraper_key == "pharmacies_run":
+                active_pharms = get_active_pharmacy_datasets(db)
+                pub_status = "Active" if active_pharms else "Missing"
+                lat_status = "Ready" if active_pharms else "Never Run"
+                items_cnt = sum(d.item_count for d in active_pharms)
+                deal_cnt = items_cnt
+                d_label = f"{len(active_pharms)} Stores Active" if active_pharms else ""
+            elif scraper_key == "dispensaries_run":
+                active_disp = get_active_dispensary_datasets(db)
+                pub_status = "Active" if active_disp else "Missing"
+                lat_status = "Ready" if active_disp else "Never Run"
+                items_cnt = sum(d.item_count for d in active_disp)
+                deal_cnt = items_cnt
+                d_label = f"{len(active_disp)} Stores Active" if active_disp else ""
+            else:  # full_run
+                pub_status = "Published" if latest_run else "Missing"
+                lat_status = "Ready" if latest_run else "Never Run"
+                items_cnt = sum(dataset.items_scraped_count or dataset.item_count or 0 for dataset in latest_published_datasets)
+                deal_cnt = len(latest_run.deals) if latest_run else 0
+                d_label = latest_run.run_date.strftime("%Y-%m-%d %H:%M UTC") if latest_run else ""
+
             cards.append(
                 {
                     "scraper_key": scraper_key,
-                    "name": "All Groceries" if is_grocery else "Full Run",
+                    "name": name,
                     "kind": "batch",
-                    "public_status": "Published" if latest_run else "Missing",
-                    "latest_status": "Ready" if latest_run else "Never Run",
-                    "items_scraped_count": sum(dataset.items_scraped_count or dataset.item_count or 0 for dataset in latest_published_datasets),
-                    "deal_count": len(latest_run.deals) if latest_run else 0,
-                    "date_label": latest_run.run_date.strftime("%Y-%m-%d %H:%M UTC") if latest_run else "",
+                    "action_url": cfg.get("action_url", f"/admin/run/{scraper_key}"),
+                    "icon": cfg.get("icon", "⚙️"),
+                    "subtitle": cfg.get("subtitle", ""),
+                    "public_status": pub_status,
+                    "latest_status": lat_status,
+                    "items_scraped_count": items_cnt,
+                    "deal_count": deal_cnt,
+                    "date_label": d_label,
                     "next_refresh_at": None,
                     "last_error": None,
                 }
@@ -207,6 +316,7 @@ def _build_admin_context(request: Request, db: Session, message: str = None, err
     return {
         "request": request,
         "cards": cards,
+        "quick_batch_actions": quick_batch_actions,
         "message": message,
         "error": error,
     }
@@ -585,7 +695,11 @@ async def read_events(request: Request, db: Session = Depends(get_db)):
             elif not event_date and re.search(r"\b(?:am|pm)\b", description_label, re.IGNORECASE):
                 if not re.search(r"\b(?:am|pm)\b", event_label, re.IGNORECASE):
                     event_label = f"{event_label} - {description_label}".strip(" -")
-            if event_date and event_date < today:
+                    event_date = parse_event_date(event_label)
+            if not event_date:
+                # Calendar must only show events with a valid date provided
+                continue
+            if event_date < today:
                 continue
             detail_url_match = re.search(r"Details:\s*(\S+)", deal.description or "")
             detail_url = detail_url_match.group(1) if detail_url_match else ""
@@ -610,10 +724,15 @@ async def read_events(request: Request, db: Session = Depends(get_db)):
 
     dated_events = [event for event in all_events if event["event_date"]]
     undated_events = [event for event in all_events if not event["event_date"]]
-    calendar_first_date = dated_events[0]["event_date"] if dated_events else today
-    calendar_last_date = dated_events[-1]["event_date"] if dated_events else today
-    calendar_start = calendar_first_date - datetime.timedelta(days=(calendar_first_date.weekday() + 1) % 7)
-    calendar_end = calendar_last_date + datetime.timedelta(days=(6 - ((calendar_last_date.weekday() + 1) % 7)))
+    # The calendar always displays exactly six full weeks starting on Sunday of the current week
+    calendar_start = today - datetime.timedelta(days=(today.weekday() + 1) % 7)
+    calendar_end = calendar_start + datetime.timedelta(days=41)
+    calendar_first_date = calendar_start
+    calendar_last_date = calendar_end
+    calendar_weeks = [
+        [calendar_start + datetime.timedelta(days=week * 7 + day_offset) for day_offset in range(7)]
+        for week in range(6)
+    ]
     calendar_events = {}
     for event in dated_events:
         recurring_match = re.search(
@@ -627,7 +746,7 @@ async def read_events(request: Request, db: Session = Depends(get_db)):
                 "friday", "saturday", "sunday"
             ].index(recurring_match.group(1).lower())
             occurrence = today + datetime.timedelta(days=(weekday - today.weekday()) % 7)
-            while occurrence <= event["event_date"]:
+            while occurrence <= event["event_date"] and occurrence <= calendar_end:
                 occurrence_event = dict(event)
                 occurrence_event["event_date"] = occurrence
                 calendar_events.setdefault(occurrence.isoformat(), []).append(occurrence_event)
@@ -635,21 +754,23 @@ async def read_events(request: Request, db: Session = Depends(get_db)):
         else:
             date_key = event["event_date"].isoformat()
             calendar_events.setdefault(date_key, []).append(event)
-    calendar_days = (calendar_end - calendar_start).days + 1
-    calendar_weeks = [
-        [calendar_start + datetime.timedelta(days=day_offset) for day_offset in range(week * 7, week * 7 + 7)]
-        for week in range(calendar_days // 7)
-    ]
             
     EVENT_URLS = {
         "shea_theater": "https://sheatheater.org",
         "rendezvous": "https://thevoo.net",
         "tree_house": "https://treehousebrew.com/events-deerfield",
         "northampton_live": "https://northampton.live/calendar",
-        "four_phantoms": "https://fourphantoms.com/lander",
+        "four_phantoms": "https://www.fourphantoms.net/events",
         "franklin_chamber": "https://chamber.franklincc.org/events",
         "shelburne_falls": "https://www.shelburnefalls.com/calendar/",
         "visit_greenfield": "https://visitgreenfieldma.com/events/",
+        "river_culture": "https://www.riverculture.org",
+        "drake_amherst": "https://www.thedrakeamherst.org",
+        "iron_horse": "https://www.ironhorse.org",
+        "luthiers_coop": "https://www.luthiers-coop.com/events/",
+        "marigold_theater": "https://marigold.org/",
+        "incandescent_brewing": "https://www.incandescentbrewing.com/events",
+        "bears_den": "https://www.thebearsdenbar.com/event-list",
     }
     
     active_store_badges = [
@@ -970,7 +1091,7 @@ async def read_pharmacies(request: Request, db: Session = Depends(get_db)):
     analysis = await _get_pharmacy_analysis(db, active_datasets, raw_deals)
 
     scored_deals = analysis.get("scored_deals", [])
-    top_overall = analysis.get("top_overall", [])
+    top_overall = analysis.get("top_overall", [])[:6]
     deals_by_category = analysis.get("deals_by_category", {})
     best_pharmacy = analysis.get("best_pharmacy")
 
@@ -1071,6 +1192,50 @@ async def admin_run_groceries(request: Request, background_tasks: BackgroundTask
     return templates.TemplateResponse(request=request, name="admin.html", context=context)
 
 
+@app.post("/admin/run/events", response_class=HTMLResponse)
+async def admin_run_events(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    redirect = _require_admin(request)
+    if redirect:
+        return redirect
+
+    background_tasks.add_task(run_events_scrape, trigger_mode="manual_events")
+    context = _build_admin_context(request, db, message="All events run queued in the background.")
+    return templates.TemplateResponse(request=request, name="admin.html", context=context)
+
+
+@app.post("/admin/run/movies", response_class=HTMLResponse)
+async def admin_run_movies(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    redirect = _require_admin(request)
+    if redirect:
+        return redirect
+
+    background_tasks.add_task(run_movies_scrape, trigger_mode="manual_movies")
+    context = _build_admin_context(request, db, message="All movies run queued in the background.")
+    return templates.TemplateResponse(request=request, name="admin.html", context=context)
+
+
+@app.post("/admin/run/pharmacies", response_class=HTMLResponse)
+async def admin_run_pharmacies(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    redirect = _require_admin(request)
+    if redirect:
+        return redirect
+
+    background_tasks.add_task(run_pharmacies_scrape, trigger_mode="manual_pharmacies")
+    context = _build_admin_context(request, db, message="All pharmacies run queued in the background.")
+    return templates.TemplateResponse(request=request, name="admin.html", context=context)
+
+
+@app.post("/admin/run/dispensaries", response_class=HTMLResponse)
+async def admin_run_dispensaries(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    redirect = _require_admin(request)
+    if redirect:
+        return redirect
+
+    background_tasks.add_task(run_dispensaries_scrape, trigger_mode="manual_dispensaries")
+    context = _build_admin_context(request, db, message="All dispensaries run queued in the background.")
+    return templates.TemplateResponse(request=request, name="admin.html", context=context)
+
+
 @app.post("/admin/run/{scraper_key}", response_class=HTMLResponse)
 async def admin_run_single(scraper_key: str, request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     redirect = _require_admin(request)
@@ -1080,7 +1245,7 @@ async def admin_run_single(scraper_key: str, request: Request, background_tasks:
     valid_scraper_keys = {
         entry["scraper_key"]
         for entry in ScraperManager().list_scrapers()
-        if entry["scraper_key"] not in ("full_run", "grocery_run")
+        if entry["scraper_key"] not in BATCH_KEYS
     }
     if scraper_key not in valid_scraper_keys:
         context = _build_admin_context(request, db, error=f"Unknown scraper '{scraper_key}'.")

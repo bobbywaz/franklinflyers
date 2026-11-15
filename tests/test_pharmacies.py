@@ -291,7 +291,7 @@ async def test_analyze_pharmacy_deals_mock():
     assert "deals_by_category" in result
     assert "best_pharmacy" in result
 
-    assert len(result["top_overall"]) >= 2
+    assert 2 <= len(result["top_overall"]) <= 6
     assert result["best_pharmacy"]["score"] >= 8
     assert all(cat in result["deals_by_category"] for cat in PHARMACY_CATEGORIES)
 
@@ -303,7 +303,7 @@ def test_pharmacies_route_ai_sections():
     assert response.status_code == 200
     html = response.text
 
-    assert "Top Pharmacy Deals Overall" in html
+    assert "Top 6 Pharmacy Deals Overall" in html or "Top Pharmacy Deals Overall" in html
     assert "Top Deals by Department" in html
     assert "Best Pharmacy Value This Week" in html
     assert "Search &amp; Browse All Circular Deals" in html or "Search & Browse All Circular Deals" in html
@@ -311,9 +311,10 @@ def test_pharmacies_route_ai_sections():
     assert "Filter by Department:" in html
     assert "Filter by Store:" in html
 
-    # Top Pharmacy Deals Overall structure checks
-    if "<span>Top Pharmacy Deals Overall</span>" in html:
-        top_section = html.split("<span>Top Pharmacy Deals Overall</span>")[1].split("Top Deals by Department")[0]
+    # Top 6 Pharmacy Deals Overall structure checks
+    top_header = "<span>Top 6 Pharmacy Deals Overall</span>" if "<span>Top 6 Pharmacy Deals Overall</span>" in html else "<span>Top Pharmacy Deals Overall</span>"
+    if top_header in html:
+        top_section = html.split(top_header)[1].split("Top Deals by Department")[0]
         assert 'title="View store ad"' in top_section
         assert "Store Ad ↗" not in top_section
         assert "text-lg text-gray-900" in top_section

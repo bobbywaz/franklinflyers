@@ -867,7 +867,7 @@ class GeminiAnalyzer:
             top_overall_good = [d for d in top_overall if d.get("score", 0) >= 8]
             if len(top_overall_good) < 4:
                 top_overall_good = [d for d in top_overall if d.get("score", 0) >= 7]
-            baseline["top_overall"] = top_overall_good or top_overall
+            baseline["top_overall"] = (top_overall_good or top_overall)[:6]
 
             # Re-group deals_by_category with updated scores, zero filler
             deals_by_category = {cat: [] for cat in PHARMACY_CATEGORIES}
@@ -937,11 +937,11 @@ class GeminiAnalyzer:
                 seen_names.add(clean_name)
                 unique_scored.append(d)
 
-        # Uncapped genuine deals: include all deals with score >= 8 (true BOGOs, buy 2 get 2 free, $10 ExtraBucks, 50%+ off)
+        # Top 6 showcase: include top 6 deals with score >= 8 (true BOGOs, buy 2 get 2 free, $10 ExtraBucks, 50%+ off)
         # If fewer than 4 deals score >= 8, fall back to score >= 7, but never score <= 6 filler.
-        top_overall = [d for d in unique_scored if d["score"] >= 8]
+        top_overall = [d for d in unique_scored if d["score"] >= 8][:6]
         if len(top_overall) < 4:
-            top_overall = [d for d in unique_scored if d["score"] >= 7]
+            top_overall = [d for d in unique_scored if d["score"] >= 7][:6]
 
         # Group by category: include all verified high-value deals (score >= 7, 0 filler score <= 6)
         deals_by_category = {cat: [] for cat in PHARMACY_CATEGORIES}

@@ -23,6 +23,13 @@ from .scrapers.four_phantoms import FourPhantomsScraper
 from .scrapers.franklin_chamber import FranklinChamberScraper
 from .scrapers.shelburne_falls import ShelburneFallsScraper
 from .scrapers.visit_greenfield import VisitGreenfieldScraper
+from .scrapers.river_culture import RiverCultureScraper
+from .scrapers.drake_amherst import DrakeAmherstScraper
+from .scrapers.iron_horse import IronHorseScraper
+from .scrapers.luthiers_coop import LuthiersCoopScraper
+from .scrapers.marigold_theater import MarigoldTheaterScraper
+from .scrapers.incandescent_brewing import IncandescentBrewingScraper
+from .scrapers.bears_den import BearsDenScraper
 from .scrapers.greenfield_garden_cinemas import GreenfieldGardenCinemasScraper
 from .scrapers.cinemark_hadley import CinemarkHadleyScraper
 from .scrapers.cvs_greenfield import CvsGreenfieldScraper
@@ -64,6 +71,13 @@ class ScraperManager:
             FranklinChamberScraper(),
             ShelburneFallsScraper(),
             VisitGreenfieldScraper(),
+            RiverCultureScraper(),
+            DrakeAmherstScraper(),
+            IronHorseScraper(),
+            LuthiersCoopScraper(),
+            MarigoldTheaterScraper(),
+            IncandescentBrewingScraper(),
+            BearsDenScraper(),
         ]
         movie_scrapers = [
             GreenfieldGardenCinemasScraper(),
@@ -97,6 +111,26 @@ class ScraperManager:
                 "kind": "batch",
             },
             {
+                "scraper_key": "events_run",
+                "store_name": "All Events",
+                "kind": "batch",
+            },
+            {
+                "scraper_key": "movies_run",
+                "store_name": "All Movies",
+                "kind": "batch",
+            },
+            {
+                "scraper_key": "pharmacies_run",
+                "store_name": "All Pharmacies",
+                "kind": "batch",
+            },
+            {
+                "scraper_key": "dispensaries_run",
+                "store_name": "All Dispensaries",
+                "kind": "batch",
+            },
+            {
                 "scraper_key": "full_run",
                 "store_name": "Full Run",
                 "kind": "batch",
@@ -127,17 +161,17 @@ class ScraperManager:
                 await browser.close()
         return result
 
-    async def run_grocery_batch(self, run_date: str = None) -> List[Dict]:
+    async def run_category_batch(self, kind: str, run_date: str = None) -> List[Dict]:
         results = []
-        grocery_keys = [
+        keys = [
             scraper.scraper_key
             for scraper in self.registry.values()
-            if getattr(scraper, "kind", "") == "grocery"
+            if getattr(scraper, "kind", "") == kind
         ]
         async with async_playwright() as playwright:
             browser = await playwright.chromium.launch(headless=True)
             try:
-                for scraper_key in grocery_keys:
+                for scraper_key in keys:
                     context = await browser.new_context(
                         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
                     )
@@ -148,6 +182,21 @@ class ScraperManager:
             finally:
                 await browser.close()
         return results
+
+    async def run_grocery_batch(self, run_date: str = None) -> List[Dict]:
+        return await self.run_category_batch("grocery", run_date=run_date)
+
+    async def run_events_batch(self, run_date: str = None) -> List[Dict]:
+        return await self.run_category_batch("event", run_date=run_date)
+
+    async def run_movies_batch(self, run_date: str = None) -> List[Dict]:
+        return await self.run_category_batch("movie", run_date=run_date)
+
+    async def run_pharmacies_batch(self, run_date: str = None) -> List[Dict]:
+        return await self.run_category_batch("pharmacy", run_date=run_date)
+
+    async def run_dispensaries_batch(self, run_date: str = None) -> List[Dict]:
+        return await self.run_category_batch("dispensary", run_date=run_date)
 
     async def run_full_batch(self, run_date: str = None) -> List[Dict]:
         results = []
