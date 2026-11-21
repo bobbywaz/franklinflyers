@@ -55,20 +55,20 @@ async def test_tree_house_scrape_fallback():
 
 
 @pytest.mark.asyncio
-async def test_rendezvous_scrape_produces_recurring_deals():
-    """Verify The Rendezvous scraper produces structured recurring weekly community events."""
+async def test_rendezvous_scrape_handles_empty_calendar():
+    """Verify The Rendezvous scraper returns valid schema and does not fabricate mock events when calendar is empty."""
     scraper = RendezvousScraper()
     mock_page = AsyncMock()
+    mock_loc = MagicMock()
+    mock_loc.count = AsyncMock(return_value=0)
+    mock_page.locator = MagicMock(return_value=mock_loc)
 
     result = await scraper.scrape(mock_page)
     assert result is not None
     assert result["kind"] == "event"
     assert result["store_name"] == "The Rendezvous"
-    assert len(result["deals"]) >= 5
-    for deal in result["deals"]:
-        assert "Every" in deal["price"]
-        assert "Until" in deal["price"]
-        assert "thevoo.net" in deal["description"]
+    assert isinstance(result["deals"], list)
+    assert len(result["deals"]) == 0
 
 
 @pytest.mark.asyncio
@@ -877,7 +877,8 @@ def test_events_calendar_always_six_weeks_and_no_undated():
     from app.models import StoreDataset, StoreDeal
     from app.database import get_db
 
-    today = datetime.date(2026, 11, 15)
+    future_date = datetime.date.today() + datetime.timedelta(days=5)
+    valid_date_str = future_date.strftime("%B %d, %Y 8:00 PM")
 
     # Create mock dataset with dated and undated deals
     mock_ds = StoreDataset(
@@ -891,7 +892,7 @@ def test_events_calendar_always_six_weeks_and_no_undated():
             StoreDeal(
                 id=901,
                 item_name="Valid Show",
-                sale_price="November 20, 2026 8:00 PM",
+                sale_price=valid_date_str,
                 description="Location: Easthampton | Details: https://luthiers.com/1",
             ),
             StoreDeal(
@@ -924,11 +925,17 @@ async def test_luthiers_coop_html_tribejson_extraction():
     """Verify Luthiers Co-op scraper extracts events with dates from data-tribejson in HTML."""
     from app.scrapers.luthiers_coop import LuthiersCoopScraper
 
-    mock_html = '''
-    <div class="tribe_events type-tribe_events" data-tribejson='{"eventId":"12345-2026-11-20","title":"Deep Trees Live","dateDisplay":"November 20 @ 7:00 pm - 9:00 pm","permalink":"https://www.luthiers-coop.com/event/deep-trees/","excerpt":"Live folk and roots"}' >
+    today = datetime.date.today()
+    future_date = today + datetime.timedelta(days=5)
+    ev_id = f"12345-{future_date.isoformat()}"
+    ev_display = f"{future_date.strftime('%B %d')} @ 7:00 pm - 9:00 pm"
+    expected_price = f"{future_date.strftime('%B %d, %Y')} 7:00 pm - 9:00 pm"
+
+    mock_html = f'''
+    <div class="tribe_events type-tribe_events" data-tribejson='{{"eventId":"{ev_id}","title":"Deep Trees Live","dateDisplay":"{ev_display}","permalink":"https://www.luthiers-coop.com/event/deep-trees/","excerpt":"Live folk and roots"}}' >
         <h3>Deep Trees Live</h3>
     </div>
-    <div class="tribe_events type-tribe_events" data-tribejson='{"eventId":"12346-2026-11-21","title":"CLOSED","dateDisplay":"November 21","permalink":"","excerpt":""}' >
+    <div class="tribe_events type-tribe_events" data-tribejson='{{"eventId":"12346-2099-11-21","title":"CLOSED","dateDisplay":"November 21","permalink":"","excerpt":""}}' >
         <h3>CLOSED</h3>
     </div>
     '''
@@ -953,7 +960,7 @@ async def test_luthiers_coop_html_tribejson_extraction():
     assert result["items_scraped_count"] >= 1
     assert any("Deep Trees Live" in d["name"] for d in result["deals"])
     deal = next(d for d in result["deals"] if "Deep Trees Live" in d["name"])
-    assert "November 20, 2026 7:00 pm - 9:00 pm" in deal["price"]
+    assert expected_price in deal["price"]
     assert "https://www.luthiers-coop.com/event/deep-trees/" in deal["description"]
     assert not any(d["name"].upper() == "CLOSED" for d in result["deals"])
 
